@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>長野県 絶滅危惧種 分布マップ</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; }
+  .box { position: absolute; z-index: 1; background: #fffe; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 sans-serif; }
+  #panel { top: 10px; left: 10px; max-width: 260px; }
+  #legend { bottom: 28px; left: 10px; }
+  #legend i { display: inline-block; width: 18px; height: 12px; margin-right: 6px; vertical-align: middle; }
+  select { font-size: 13px; }
+  small { color: #555; }
+  a { color: #1a5fb4; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel" class="box">
+  <b>長野県 絶滅危惧種 分布マップ</b><br>
+  <small>IUCN CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計</small><br>
+  表示：
+  <select id="mode">
+    <option value="n">記録数</option>
+    <option value="sp">種数</option>
+  </select>
+  <details style="margin-top:6px">
+    <summary><b>CR/EN/VUとは？</b></summary>
+    <p style="margin:6px 0">IUCN（国際自然保護連合）のレッドリストで、野生生物が絶滅するおそれの高さを示す区分です。この3つを合わせて「絶滅危惧種」と呼びます。</p>
+    <div><b>CR</b>（深刻な危機）：ごく近い将来に野生で絶滅する危険性が極めて高い</div>
+    <div><b>EN</b>（危機）：近い将来に野生で絶滅する危険性が高い</div>
+    <div><b>VU</b>（危急）：絶滅の危険が増大している</div>
+    <p style="margin:6px 0"><small>環境省レッドリストの絶滅危惧IA類・IB類・II類にほぼ対応しますが、評価は別です。ここではIUCN（世界）の評価を使っています。</small></p>
+  </details>
+  <div style="margin-top:6px"><a href="general.html">→ 一般分布マップへ</a> ／ <a href="./">トップ</a></div>
+</div>
+<div id="legend" class="box"></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: { gsi: { type: 'raster', tileSize: 256,
+      tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a> | データ: <a href="https://www.gbif.org">GBIF</a>' } },
+    layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }]
+  },
+  center: [138.0, 36.15], zoom: 7.3
+});
+map.addControl(new maplibregl.NavigationControl());
+const addMask = () => {
+  map.addSource('mask', { type: 'geojson', data: 'data/nagano_mask.geojson' });
+  map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
+};
+const COLORS = ['#ffffb2', '#fecc5c', '#fd8d3c', '#e31a1c'];
+const STEPS = { n: [1, 5, 20, 60], sp: [1, 3, 6, 12] };
+const colorExpr = f => ['step', ['get', f], COLORS[0], STEPS[f][1], COLORS[1], STEPS[f][2], COLORS[2], STEPS[f][3], COLORS[3]];
+function legend(f) {
+  const s = STEPS[f];
+  const rows = COLORS.map((c, i) => `<div><i style="background:${c}"></i>${i < 3 ? (s[i] === s[i + 1] - 1 ? s[i] : s[i] + '–' + (s[i + 1] - 1)) : s[3] + '以上'}</div>`);
+  document.getElementById('legend').innerHTML = '<b>' + (f === 'n' ? '記録数' : '種数') + '（メッシュ内）</b>' + rows.join('');
+}
+map.on('load', () => {
+  map.addSource('mesh', { type: 'geojson', data: 'data/mesh_nagano.geojson' });
+  map.addLayer({ id: 'mesh', type: 'fill', source: 'mesh',
+    paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.75, 'fill-outline-color': '#fff8' } });
+  addMask();
+  legend('n');
+  document.getElementById('mode').onchange = e => {
+    map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
+    legend(e.target.value);
+  };
+  map.on('click', 'mesh', e => {
+    const p = e.features[0].properties;
+    new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
+      `<b>記録数 ${p.n} / 種数 ${p.sp}</b><br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
+      `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`).addTo(map);
+  });
+  map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'mesh', () => map.getCanvas().style.cursor = '');
+});
+</script>
+</body>
+</html>

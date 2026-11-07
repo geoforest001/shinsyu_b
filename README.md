@@ -1,7 +1,9 @@
 # shiny_b
 長野県 絶滅危惧種 分布マップ（GitHub Pages）
 
-- `index.html` : MapLibre GL JS による地図ページ
+- `index.html` : 入口ページ
+- `rare.html` : 絶滅危惧種マップ（メッシュ集計）
+- `general.html` : 一般分布マップ（GBIF密度タイル）
 - `data/nagano_mask.geojson` : 県外を薄く表示するためのマスク（境界: dataofjapan/land）
 - `data/mesh_nagano.geojson` : 約5km(0.05°)メッシュ集計（記録数・種数・カテゴリ別）
 
