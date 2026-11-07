@@ -1,4 +1,4 @@
-# shiny_b
+# shinsyu_b
 長野県 動植物 分布マップ（GitHub Pages）
 
 - `index.html` : 地図ページ（一般分布レイヤ＋絶滅危惧種レイヤを1枚に重ねて表示、個別にオン/オフ）

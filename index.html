@@ -524,7 +524,7 @@ map.on('load', () => {
       body += '\n## 送信時の絞り込み条件\n' + CONDS.map(c => { const v = condVal(c), off = c.id in OFF && v === OFF[c.id]; return `- ${c.label} ${off ? '指定なし' : v + (c.unit || '')}`; }).join('\n') + `\n- 該当メッシュ数: ${hits().length}\n`;
     }
     const title = 'ご要望: ' + (kinds[0] || text.slice(0, 20));
-    window.open('https://github.com/geoforest001/shiny_b/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body), '_blank', 'noopener');
+    window.open('https://github.com/geoforest001/shinsyu_b/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body), '_blank', 'noopener');
     $('fb').close();
   };
   $('mode').onchange = e => {
