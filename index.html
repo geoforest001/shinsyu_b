@@ -181,6 +181,15 @@
   <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
 </dialog>
+<dialog id="spdlg" style="border:1px solid #888;border-radius:8px;padding:14px 16px;font:13px/1.6 sans-serif;width:min(520px,92vw)">
+  <b id="sp-title" style="font-size:15px"></b>
+  <div style="margin:6px 0">
+    <button id="sp-tab-rare">危惧種（CR/EN/VU）</button> <button id="sp-tab-gen">一般（記録の多い上位20種）</button>
+    <button id="sp-close" style="float:right">閉じる</button>
+  </div>
+  <div id="sp-body" style="max-height:60vh;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fff"></div>
+  <small id="sp-note" style="color:#555"></small>
+</dialog>
 <dialog id="fb" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:360px">
   <b style="font-size:15px">ご要望・お問い合わせ</b><br>
   <small>どんなことを求めていますか？（複数選べます）</small>
@@ -388,7 +397,7 @@ map.on('load', () => {
       $('results').querySelectorAll('tr.sel').forEach(x => x.classList.remove('sel')); tr.classList.add('sel');
       map.getSource('sel').setData({ type: 'FeatureCollection', features: [f] });
       map.fitBounds(b, { maxZoom: 10.5, padding: 120, duration: 600 });
-      new maplibregl.Popup().setLngLat([(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2]).setHTML(popupHtml(f.properties)).addTo(map);
+      popupNode(f.properties, { lng: (b[0][0] + b[1][0]) / 2, lat: (b[0][1] + b[1][1]) / 2 }).addTo(map);
     });
   }
   const showOv = on => ['ov-fill', 'ov-line'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
@@ -399,9 +408,9 @@ map.on('load', () => {
   const save = (name, type, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   $('dl-geo').onclick = () => save('overlap_mesh.geojson', 'application/geo+json', JSON.stringify({ type: 'FeatureCollection', features: hits() }));
   $('dl-csv').onclick = () => {
-    const rows = ['市町村,緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%)'];
+    const rows = ['市町村,緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%),主な危惧種（上位5種）'];
     hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
-      rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle].join(',')); });
+      rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle, '"' + topNames(p.id, 5).replace(/"/g, '""') + '"'].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
   };
   // --- PDFレポート ---
@@ -463,7 +472,7 @@ map.on('load', () => {
     const cityRows = Object.entries(byCity).sort((a, b) => b[1].n - a[1].n).map(([name, c]) =>
       `<tr><td>${esc(name)}</td><td>${c.m}</td><td>${c.n}</td><td>${c.g}</td><td>${(c.s / c.m).toFixed(1)}°</td></tr>`).join('');
     const listRows = rows.map(f => { const p = f.properties, c = f.geometry.coordinates[0];
-      return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.CR}/${p.EN}/${p.VU}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td></tr>`; }).join('');
+      return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.CR}/${p.EN}/${p.VU}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td><td style="text-align:left;font-size:9.5px">${esc(topNames(p.id, 5))}</td></tr>`; }).join('');
     const d = new Date(), ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
     const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>長野県 絶滅危惧種 分布レポート</title><style>
       @page { size: A4; margin: 14mm; }
@@ -483,7 +492,7 @@ map.on('load', () => {
     <table class="cond"><tr><th>条件</th><th>値</th></tr>${condText()}</table>
     ${img ? `<h2>2. 該当メッシュの分布</h2><img src="${img}"><div class="legend"><small>紫の枠＝条件に合うメッシュ。黄〜赤＝危惧種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。</small></div>` : ''}
     ${$('inc-city').checked ? `<h2>3. 市町村別集計</h2><table><tr><th>市町村</th><th>メッシュ数</th><th>危惧種 記録数</th><th>一般記録数</th><th>平均傾斜</th></tr>${cityRows}</table>` : ''}
-    ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>危惧種 記録</th><th>種数</th><th>CR/EN/VU</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
+    ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>危惧種 記録</th><th>種数</th><th>CR/EN/VU</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th><th>主な危惧種</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
     <h2>注意事項・出典</h2>
     <small>・危惧種は IUCN レッドリスト CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計。希少種保護のため個別の位置は掲載していません。<br>
     ・記録数は調査の多さを反映します。記録の多い場所が、必ずしも生き物の多い場所とは限りません。<br>
@@ -540,6 +549,56 @@ map.on('load', () => {
   const popupHtml = p =>
       `<b>${p.city}</b><br><b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`;
+  // --- 種名（危惧種：data/rare_species.json、一般：GBIF から取得）---
+  let rareSp = {};
+  fetch('data/rare_species.json').then(r => r.json()).then(d => { rareSp = d; }).catch(() => {});
+  const topNames = (id, n) => (rareSp[id] || []).slice(0, n).map(x => x[1] || x[0]).join('、');
+  const CELL = 0.05, cellPoly = id => { const [a, b] = id.split('_').map(Number), x0 = b * CELL, y0 = a * CELL, x1 = x0 + CELL, y1 = y0 + CELL;
+    return `POLYGON((${x0.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y0.toFixed(4)}))`; };
+  const JPRE = /[ぁ-んァ-ヶ一-龥]/, nameCache = new Map();
+  async function speciesName(key) {  // 学名と和名（取得できなければ学名のみ）
+    if (nameCache.has(key)) return nameCache.get(key);
+    const pr = (async () => {
+      try {
+        const d = await (await fetch(`https://api.gbif.org/v1/species/${key}`)).json();
+        let ja = '';
+        try {
+          const v = await (await fetch(`https://api.gbif.org/v1/species/${key}/vernacularNames?limit=200`)).json();
+          const c = v.results.filter(x => x.language === 'jpn' && JPRE.test(x.vernacularName)).map(x => x.vernacularName);
+          ja = c.find(x => /^[ァ-ヶー・]+$/.test(x)) || c[0] || '';
+        } catch (e) { /* 和名なし */ }
+        return [d.canonicalName || d.scientificName || String(key), ja];
+      } catch (e) { return [String(key), '']; }
+    })();
+    nameCache.set(key, pr); return pr;
+  }
+  const spRow = (sci, ja, n, extra) => `<tr><td>${ja ? esc(ja) + '<br>' : ''}<i style="color:#555;font-size:11px">${esc(sci)}</i></td>${extra !== undefined ? `<td>${extra}</td>` : ''}<td style="text-align:right">${n}</td></tr>`;
+  const spTable = (head, rows) => rows.length ? `<table style="border-collapse:collapse;width:100%"><tr style="background:#eee"><th style="text-align:left">種名</th>${head}<th>記録数</th></tr>${rows.join('')}</table>` : '<p>該当なし</p>';
+  let spCur = null;
+  async function showSpecies(props, tab) {
+    spCur = props; $('sp-title').textContent = `${props.city}（5kmメッシュ）の種名`;
+    if (!$('spdlg').open) $('spdlg').showModal();
+    const body = $('sp-body'); $('sp-tab-rare').disabled = tab === 'rare'; $('sp-tab-gen').disabled = tab === 'gen';
+    if (tab === 'rare') {
+      const L = rareSp[props.id] || [];
+      body.innerHTML = spTable('<th>区分</th>', L.map(x => spRow(x[0], x[1], x[2], x[3])));
+      $('sp-note').textContent = 'IUCN CR/EN/VU の記録がある種（GBIF）。和名がない種は学名のみです。区分はGBIFの照合結果に基づくため、栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。県境のメッシュは他県の記録が入り、メッシュの記録数と一致しない場合があります。位置は5kmメッシュ単位までです。';
+    } else {
+      body.textContent = '取得中…';
+      $('sp-note').textContent = '記録数の多い順の上位20種（GBIF、いま取得）。分類群は左パネルの「一般分布」の選択に合わせます。調査の多い種が上位になります。';
+      try {
+        const q = new URLSearchParams({ country: 'JP', geometry: cellPoly(props.id), hasCoordinate: 'true', hasGeospatialIssue: 'false', limit: 0, facet: 'speciesKey', facetLimit: 20 });
+        if ($('taxon').value) q.set('taxonKey', $('taxon').value);
+        const d = await (await fetch('https://api.gbif.org/v1/occurrence/search?' + q)).json();
+        const cs = d.facets[0] ? d.facets[0].counts : [];
+        const nm = await Promise.all(cs.map(c => speciesName(c.name)));
+        if (spCur !== props) return;
+        body.innerHTML = spTable('', cs.map((c, i) => spRow(nm[i][0], nm[i][1], c.count)));
+      } catch (e) { body.textContent = 'GBIF から取得できませんでした。しばらくしてからもう一度お試しください。'; }
+    }
+  }
+  $('sp-tab-rare').onclick = () => showSpecies(spCur, 'rare'); $('sp-tab-gen').onclick = () => showSpecies(spCur, 'gen');
+  $('sp-close').onclick = () => $('spdlg').close();
   // --- 調査ルート案内（左のサイドバー）---
   const openRoute = on => {
     document.body.classList.toggle('route-open', on);
@@ -595,6 +654,11 @@ map.on('load', () => {
       const btn = (w, t) => { const b = document.createElement('button'); b.className = 'rt-go'; b.textContent = t;
         b.onclick = () => { pop.remove(); Route.setPoint(w, [ll.lng, ll.lat], props ? `${props.city}のメッシュ` : '地図で選んだ地点'); }; return b; };
       div.append(document.createElement('br'), btn('start', 'ここを出発地に'), ' ', btn('goal', 'ここを目的地に'));
+    }
+    if (props && props.id) {
+      const sb = document.createElement('button'); sb.textContent = '種名を見る'; sb.style.marginTop = '4px';
+      sb.onclick = () => showSpecies(props, props.n > 0 ? 'rare' : 'gen');
+      div.append(document.createElement('br'), sb);
     }
     const pop = new maplibregl.Popup().setLngLat(ll).setDOMContent(div);
     return pop;
