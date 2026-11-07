@@ -24,8 +24,12 @@ const Route = (() => {
   const pad = p => { const el = document.getElementById('rt-panel'), w = el && el.offsetWidth && innerWidth > 600 ? el.offsetWidth + 10 : 0;
     return { top: p, bottom: p, right: p, left: p + w }; };
   let map, G = null, loading = null, onMsg = () => {}, onChange = () => {};
+<<<<<<< Updated upstream
   let pickFor = null, routed = false;
   let last = null;               // 直近の経路の結果（PDFレポート用。route_report.js が読む）
+=======
+  let pickFor = null, routed = false, lastRoute = null;
+>>>>>>> Stashed changes
   const pts = { start: null, goal: null };     // { ll, label }
   const markers = {};
 
@@ -198,6 +202,7 @@ const Route = (() => {
     const start = pts.start.ll, goal = pts.goal.ll;
     last = null;
     if (!inArea(goal)) { onMsg(`目的地が対象範囲（${AREA_NAME}・青い点線の枠）の外です。`); return; }
+    lastRoute = null;
     onMsg('経路を計算中…');
     try { await load(); } catch (e) { onMsg(e.message); return; }
     const [s0, sd] = nearestCarNode(start);
@@ -277,6 +282,9 @@ const Route = (() => {
     map.fitBounds([[Math.min(...lo), Math.min(...la)], [Math.max(...lo), Math.max(...la)]], { padding: pad(80), maxZoom: 15, duration: 700 });
     const km = m => (m / 1000).toFixed(1) + ' km', mins = s => s < 3600 ? Math.round(s / 60) + ' 分' : Math.floor(s / 3600) + ' 時間 ' + Math.round(s % 3600 / 60) + ' 分';
     const offS = off.sec;
+    lastRoute = { start, goal, startNode, goalNode, park: parkC, lines, offSamples: off.samples, boff, sd,
+      carM: sum[CAR][0], footM: sum[FOOT][0], offS, totalS: sum[CAR][1] + sum[FOOT][1] + offS + (park !== null ? PARK_SEC : 0),
+      labels: { start: pts.start.label, goal: pts.goal.label } };
     if (walk.length) await Slope.prefetch(bboxOf(walk)).catch(() => {});
     const prof = profile(walk, off.samples);
     const parkSec = park !== null ? PARK_SEC : 0;
@@ -309,10 +317,51 @@ const Route = (() => {
         ${G.hasTob ? '' : '<li>このグラフには登り下りの係数がないため、道のある区間は平地として計算しています。</li>'}</ul></div>`);
   }
 
+  // ---- GPX の書き出し ----
+  // 車・徒歩（道あり）・道なし（直線）を別々の軌跡にし、出発地・駐車地点・目的地をウェイポイントにする。
+  // 標高は、標高タイルを読み込み済みの徒歩・道なし区間だけ付ける（車の区間は付けない）。
+  const xml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  async function gpx() {
+    const R = lastRoute; if (!R) return null;
+    const foot = R.lines[FOOT].flatMap(l => l.coords), offLL = R.offSamples.length ? R.offSamples.map(s => s.ll) : [R.goalNode, R.goal];
+    try { await Slope.prefetch(bboxOf([...foot, ...offLL])); } catch (e) { /* 標高なしで書き出す */ }
+    const ele = ll => { const e = Slope.elevAt(ll); return isNaN(e) ? '' : `<ele>${e.toFixed(1)}</ele>`; };
+    const trkpt = (ll, withEle) => `<trkpt lat="${ll[1].toFixed(6)}" lon="${ll[0].toFixed(6)}">${withEle ? ele(ll) : ''}</trkpt>`;
+    const seg = (coords, withEle) => `<trkseg>${coords.map(c => trkpt(c, withEle)).join('')}</trkseg>`;
+    const wpt = (ll, name, desc, sym) => `<wpt lat="${ll[1].toFixed(6)}" lon="${ll[0].toFixed(6)}">${ele(ll)}<name>${xml(name)}</name><desc>${xml(desc)}</desc><sym>${sym}</sym></wpt>`;
+    const km = m => (m / 1000).toFixed(1) + ' km', mins = s => Math.round(s / 60) + ' 分';
+    const d0 = new Date(), today = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`;
+    const desc = `車 ${km(R.carM)} ／ 徒歩（道あり）${km(R.footM)} ／ 道なし ${Math.round(R.boff)} m ／ 合計の目安 ${mins(R.totalS)}。` +
+      '計画上の目安のルートです。路面・積雪・藪・通行止めは考慮していません。林道は入山前に管理者へ確認してください。道路データ © OpenStreetMap contributors (ODbL)、標高 国土地理院。';
+    const trk = (name, segs) => segs.length ? `<trk><name>${name}</name>${segs.join('')}</trk>` : '';
+    const offSegs = [];
+    if (distM(R.start, R.startNode) >= 1) offSegs.push(seg([R.start, R.startNode], false));
+    if (R.boff >= 1 || R.offSamples.length) offSegs.push(seg(offLL, true));
+    const parts = [
+      wpt(R.start, '出発地', R.labels.start, 'Flag, Blue'),
+      R.park ? wpt(R.park, '駐車地点（P）', '車はここまで。以降は徒歩', 'Parking Area') : '',
+      R.boff >= 1 ? wpt(R.goalNode, '道の端', 'ここから道なし（直線）', 'Trail Head') : '',
+      wpt(R.goal, '目的地', R.labels.goal, 'Flag, Red'),
+      trk('車', R.lines[CAR].map(l => seg(l.coords, false))),
+      trk('徒歩（道あり）', R.lines[FOOT].map(l => seg(l.coords, true))),
+      trk('道なし（直線）', offSegs),
+    ].filter(Boolean).join('\n  ');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="shinsyu_b 調査ルート案内（試作）" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>調査ルート ${today}</name><desc>${xml(desc)}</desc></metadata>
+  ${parts}
+</gpx>
+`;
+  }
+
   // ---- 出発地・目的地 ----
   const empty = () => ({ type: 'FeatureCollection', features: [] });
   function clearRoute() {
+<<<<<<< Updated upstream
     routed = false; last = null;
+=======
+    routed = false; lastRoute = null;
+>>>>>>> Stashed changes
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
@@ -403,6 +452,11 @@ const Route = (() => {
   function cancelPick() { pickFor = null; if (map) map.getCanvas().style.cursor = ''; }
   const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
   const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
+<<<<<<< Updated upstream
   return { init, setVisible, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
     has: w => !!pts[w], result: () => last, AREA_NAME };
+=======
+  return { init, setVisible, gpx, hasRoute: () => !!lastRoute, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
+    has: w => !!pts[w], AREA_NAME };
+>>>>>>> Stashed changes
 })();

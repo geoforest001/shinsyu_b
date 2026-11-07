@@ -141,6 +141,7 @@
   <div class="rt-sub"><button data-pick="goal">地図で選ぶ</button> <small id="rt-note-goal">メッシュをクリックしても選べます</small></div>
   <div class="rt-hits" id="rt-hits-goal" hidden></div>
   <button id="rt-run" disabled>案内</button>
+  <button id="rt-gpx" disabled style="width:100%;margin-top:4px;padding:6px;font-size:13px">GPXで保存（スマホ・GPS機器用）</button>
   <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
   <div id="rt-msg" style="margin-top:4px"></div>
   <button id="rt-pdf" hidden style="width:100%;margin-top:8px;padding:6px;font-size:13px">ルート案内をPDFで保存…</button>
@@ -310,7 +311,11 @@ map.on('load', () => {
   map.addSource('pref', { type: 'geojson', data: 'data/nagano_outline.geojson' });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   map.addLayer({ id: 'pref-line', type: 'line', source: 'pref', paint: { 'line-color': '#555', 'line-width': 1.4 } });
+<<<<<<< Updated upstream
   Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-pdf').hidden = !Route.result(); }, (w, p, ok) => {
+=======
+  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-gpx').disabled = !Route.hasRoute(); }, (w, p, ok) => {
+>>>>>>> Stashed changes
     const inp = $('rt-in-' + w);
     inp.value = p ? p.label : ''; inp.classList.toggle('set', !!p); $('rt-hits-' + w).hidden = true;
     $('rt-note-' + w).innerHTML = !p ? (w === 'goal' ? 'メッシュをクリックしても選べます' : '')
@@ -558,7 +563,15 @@ map.on('load', () => {
   $('rt-swap').onclick = () => Route.swap();
   $('rt-clear').onclick = () => Route.clear();
   $('rt-run').onclick = () => Route.run();
+<<<<<<< Updated upstream
   $('rt-pdf').onclick = () => RouteReport.open();
+=======
+  $('rt-gpx').onclick = async () => {
+    const t = await Route.gpx(); if (!t) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'application/gpx+xml' }));
+    const d0 = new Date(); a.download = 'route_' + d0.getFullYear() + String(d0.getMonth() + 1).padStart(2, '0') + String(d0.getDate()).padStart(2, '0') + '.gpx'; a.click();
+  };
+>>>>>>> Stashed changes
   ['start', 'goal'].forEach(w => {
     const inp = $('rt-in-' + w), hits = $('rt-hits-' + w);
     inp.oninput = () => { inp.classList.remove('set'); hits.hidden = true; };
