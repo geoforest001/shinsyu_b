@@ -24,12 +24,9 @@ const Route = (() => {
   const pad = p => { const el = document.getElementById('rt-panel'), w = el && el.offsetWidth && innerWidth > 600 ? el.offsetWidth + 10 : 0;
     return { top: p, bottom: p, right: p, left: p + w }; };
   let map, G = null, loading = null, onMsg = () => {}, onChange = () => {};
-<<<<<<< Updated upstream
   let pickFor = null, routed = false;
   let last = null;               // 直近の経路の結果（PDFレポート用。route_report.js が読む）
-=======
-  let pickFor = null, routed = false, lastRoute = null;
->>>>>>> Stashed changes
+  let lastRoute = null;          // 直近の経路の結果（GPX書き出し用）
   const pts = { start: null, goal: null };     // { ll, label }
   const markers = {};
 
@@ -357,11 +354,7 @@ const Route = (() => {
   // ---- 出発地・目的地 ----
   const empty = () => ({ type: 'FeatureCollection', features: [] });
   function clearRoute() {
-<<<<<<< Updated upstream
-    routed = false; last = null;
-=======
-    routed = false; lastRoute = null;
->>>>>>> Stashed changes
+    routed = false; last = null; lastRoute = null;
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
@@ -452,11 +445,6 @@ const Route = (() => {
   function cancelPick() { pickFor = null; if (map) map.getCanvas().style.cursor = ''; }
   const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
   const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
-<<<<<<< Updated upstream
-  return { init, setVisible, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
-    has: w => !!pts[w], result: () => last, AREA_NAME };
-=======
   return { init, setVisible, gpx, hasRoute: () => !!lastRoute, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
-    has: w => !!pts[w], AREA_NAME };
->>>>>>> Stashed changes
+    has: w => !!pts[w], result: () => last, AREA_NAME };
 })();

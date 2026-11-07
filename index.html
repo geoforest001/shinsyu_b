@@ -311,11 +311,7 @@ map.on('load', () => {
   map.addSource('pref', { type: 'geojson', data: 'data/nagano_outline.geojson' });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   map.addLayer({ id: 'pref-line', type: 'line', source: 'pref', paint: { 'line-color': '#555', 'line-width': 1.4 } });
-<<<<<<< Updated upstream
-  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-pdf').hidden = !Route.result(); }, (w, p, ok) => {
-=======
-  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-gpx').disabled = !Route.hasRoute(); }, (w, p, ok) => {
->>>>>>> Stashed changes
+  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-pdf').hidden = !Route.result(); $('rt-gpx').disabled = !Route.hasRoute(); }, (w, p, ok) => {
     const inp = $('rt-in-' + w);
     inp.value = p ? p.label : ''; inp.classList.toggle('set', !!p); $('rt-hits-' + w).hidden = true;
     $('rt-note-' + w).innerHTML = !p ? (w === 'goal' ? 'メッシュをクリックしても選べます' : '')
@@ -563,15 +559,12 @@ map.on('load', () => {
   $('rt-swap').onclick = () => Route.swap();
   $('rt-clear').onclick = () => Route.clear();
   $('rt-run').onclick = () => Route.run();
-<<<<<<< Updated upstream
   $('rt-pdf').onclick = () => RouteReport.open();
-=======
   $('rt-gpx').onclick = async () => {
     const t = await Route.gpx(); if (!t) return;
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'application/gpx+xml' }));
     const d0 = new Date(); a.download = 'route_' + d0.getFullYear() + String(d0.getMonth() + 1).padStart(2, '0') + String(d0.getDate()).padStart(2, '0') + '.gpx'; a.click();
   };
->>>>>>> Stashed changes
   ['start', 'goal'].forEach(w => {
     const inp = $('rt-in-' + w), hits = $('rt-hits-' + w);
     inp.oninput = () => { inp.classList.remove('set'); hits.hidden = true; };
