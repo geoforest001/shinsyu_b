@@ -231,6 +231,7 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="slope.js"></script>
 <script src="route.js"></script>
+<script src="terrain3d.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const COLORS = ['#ffffb2', '#fecc5c', '#fd8d3c', '#e31a1c'];
@@ -432,6 +433,7 @@ map.on('load', () => {
     let img = '';
     if ($('inc-map').checked) {
       const prev = { c: map.getCenter(), z: map.getZoom(), ov: $('ov-on').checked, only: $('only').checked, base: $('base').value };
+      const t3 = T3D.suspend();
       if ($('inc-white').checked) setBase('white');
       document.querySelectorAll('.maplibregl-popup').forEach(x => x.remove());
       map.getSource('sel').setData({ type: 'FeatureCollection', features: [] });
@@ -449,6 +451,7 @@ map.on('load', () => {
         img = o.toDataURL('image/jpeg', 0.85);
       } catch (e) { img = ''; }
       setBase(prev.base);
+      T3D.resume(t3);
       showOv(prev.ov); map.jumpTo({ center: prev.c, zoom: prev.z });
     }
     const byCity = {};
