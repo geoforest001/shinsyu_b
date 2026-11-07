@@ -56,6 +56,20 @@
       <p style="margin:6px 0"><small>環境省レッドリストの絶滅危惧IA類・IB類・II類にほぼ対応しますが、評価は別です。ここではIUCN（世界）の評価を使っています。</small></p>
     </details>
   </div>
+
+  <div class="sec">
+    <label><input type="checkbox" id="ov-on"> <b>重なりを抽出</b></label><br>
+    <small>下の条件を両方満たす5kmメッシュを強調します。</small><br>
+    危惧種の記録数 ≧ <b id="ov-r-v">3</b><br>
+    <input type="range" id="ov-r" min="1" max="30" value="3" style="width:100%"><br>
+    一般記録数 ≧ <b id="ov-g-v">1000</b>（中央値 約600）<br>
+    <input type="range" id="ov-g" min="0" max="5000" step="100" value="1000" style="width:100%"><br>
+    該当：<b id="ov-count">-</b> メッシュ
+    <div style="margin-top:4px">
+      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button>
+    </div>
+    <small>一般記録には危惧種の記録も含まれます。</small>
+  </div>
 </div>
 <div id="legend" class="box"></div>
 
@@ -96,11 +110,17 @@ const addGen = () => {
 };
 
 map.on('load', () => {
-  map.addSource('mesh', { type: 'geojson', data: 'data/mesh_nagano.geojson' });
+  map.addSource('mesh', { type: 'geojson', data: 'data/grid_nagano.geojson' });
   map.addLayer({ id: 'mesh', type: 'fill', source: 'mesh',
+    filter: ['>', ['get', 'n'], 0],
     paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.8, 'fill-outline-color': '#ffffff99' },
     layout: { visibility: $('rare-on').checked ? 'visible' : 'none' } });
   map.addSource('mask', { type: 'geojson', data: 'data/nagano_mask.geojson' });
+  const ovf = () => ['all', ['>=', ['get', 'n'], +$('ov-r').value], ['>=', ['get', 'gen'], +$('ov-g').value]];
+  map.addLayer({ id: 'ov-fill', type: 'fill', source: 'mesh', filter: ovf(),
+    paint: { 'fill-color': '#6a1b9a', 'fill-opacity': 0.35 }, layout: { visibility: 'none' } });
+  map.addLayer({ id: 'ov-line', type: 'line', source: 'mesh', filter: ovf(),
+    paint: { 'line-color': '#4a148c', 'line-width': 2.5 }, layout: { visibility: 'none' } });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   addGen();
   legend($('mode').value);
@@ -112,6 +132,28 @@ map.on('load', () => {
     $('legend').style.display = e.target.checked ? 'block' : 'none';
   };
   $('taxon').onchange = addGen;
+
+  // --- 重なり抽出 ---
+  let grid = null;
+  fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; updateOv(); });
+  const hits = () => grid ? grid.features.filter(f => f.properties.n >= +$('ov-r').value && f.properties.gen >= +$('ov-g').value) : [];
+  function updateOv() {
+    $('ov-r-v').textContent = $('ov-r').value; $('ov-g-v').textContent = $('ov-g').value;
+    const f = ovf();
+    map.setFilter('ov-fill', f); map.setFilter('ov-line', f);
+    $('ov-count').textContent = grid ? hits().length : '-';
+  }
+  const showOv = on => ['ov-fill', 'ov-line'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+  $('ov-on').onchange = e => { showOv(e.target.checked); if (e.target.checked) $('rare-on').checked || ($('rare-on').checked = true, $('rare-on').onchange({ target: $('rare-on') })); };
+  $('ov-r').oninput = updateOv; $('ov-g').oninput = updateOv;
+  const save = (name, type, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
+  $('dl-geo').onclick = () => save('overlap_mesh.geojson', 'application/geo+json', JSON.stringify({ type: 'FeatureCollection', features: hits() }));
+  $('dl-csv').onclick = () => {
+    const rows = ['緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数'];
+    hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
+      rows.push([((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen].join(',')); });
+    save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
+  };
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
     legend(e.target.value);
@@ -119,7 +161,7 @@ map.on('load', () => {
   map.on('click', 'mesh', e => {
     const p = e.features[0].properties;
     new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
-      `<b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
+      `<b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`).addTo(map);
   });
   map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');

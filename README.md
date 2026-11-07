@@ -3,7 +3,7 @@
 
 - `index.html` : 地図ページ（一般分布レイヤ＋絶滅危惧種レイヤを1枚に重ねて表示、個別にオン/オフ）
 - `data/nagano_mask.geojson` : 県外を薄く表示するためのマスク（境界: dataofjapan/land）
-- `data/mesh_nagano.geojson` : 約5km(0.05°)メッシュ集計（記録数・種数・カテゴリ別）
+- `data/grid_nagano.geojson` : 県内545セルの約5km(0.05°)メッシュ（危惧種の記録数・種数・カテゴリ別、一般記録数）
 
 ## データ
 - 出典: GBIF (https://www.gbif.org) 出現記録、IUCNレッドリスト CR/EN/VU、2026-11-07取得
