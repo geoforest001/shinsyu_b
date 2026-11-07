@@ -25,7 +25,7 @@
 <body>
 <div id="map"></div>
 <div id="panel" class="box">
-  <b>長野県 動植物 分布マップ</b>
+  <b>長野県 動植物 分布マップ</b> <button id="open-welcome" style="float:right;font-size:12px">最初のメニュー</button>
 
   <div class="sec">
     <label><input type="checkbox" id="gen-on" checked> <b>一般分布</b>（全記録の密度）</label><br>
@@ -93,6 +93,19 @@
       <div id="results" style="max-height:calc(100vh - 270px);overflow:auto;margin-top:4px;border:1px solid #ccc;border-radius:4px;background:#fff"></div>
       <small>行をクリックすると地図で該当メッシュに移動します。</small>
 </div>
+<dialog id="welcome" style="border:1px solid #888;border-radius:10px;padding:18px 20px;font:14px/1.6 sans-serif;max-width:420px">
+  <b style="font-size:17px">長野県 動植物 分布マップ</b><br>
+  <span style="color:#444">何をしたいですか？ 選ぶと、条件と表示を自動で設定します。</span>
+  <style>#welcome button.opt { display:block; width:100%; text-align:left; margin:6px 0; padding:8px 10px; border:1px solid #bbb; border-radius:6px; background:#fafafa; font-size:14px; cursor:pointer; }
+    #welcome button.opt:hover { background:#eef6ff; } #welcome button.opt small { display:block; color:#555; font-size:12px; }</style>
+  <button class="opt" data-go="many">危惧種が多い場所を探す<small>記録10件以上のメッシュを抽出</small></button>
+  <button class="opt" data-go="steep">急傾斜域の危惧種を見る<small>平均傾斜30°以上。傾斜区分図も表示</small></button>
+  <button class="opt" data-go="gentle">里山（緩傾斜域）の危惧種を見る<small>平均傾斜15°以下</small></button>
+  <button class="opt" data-go="surveyed">調査が進み危惧種も多い場所<small>一般記録3000件以上かつ危惧種10件以上</small></button>
+  <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
+  <button class="opt" data-go="report">PDFレポートを作る<small>条件を選んで印刷用レポートを出力</small></button>
+  <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
+</dialog>
 <dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
   <b style="font-size:15px">PDFレポート作成</b>
   <div style="margin-top:8px">条件：
@@ -342,6 +355,21 @@ map.on('load', () => {
     w.document.open(); w.document.write(html); w.document.close();
     setTimeout(() => w.print(), 700);
   };
+  // --- 最初のメニュー ---
+  const setCheck = (id, v) => { $(id).checked = v; $(id).onchange({ target: $(id) }); };
+  const usePreset = k => { const pr = PRESETS[k]; CONDS.forEach(c => $('c-' + c.id).value = pr && c.id in pr ? pr[c.id] : c.def); $('preset').value = 'cur'; updateOv(); };
+  const GO = {
+    many:     () => { setCheck('gen-on', false); setCheck('slope-on', false); usePreset('many');   setCheck('only', true); setCheck('ov-on', true); },
+    steep:    () => { setCheck('gen-on', false); setCheck('slope-on', true);  usePreset('steep');  setCheck('only', true); setCheck('ov-on', true); },
+    gentle:   () => { setCheck('gen-on', false); setCheck('slope-on', false); usePreset('gentle'); setCheck('only', true); setCheck('ov-on', true); },
+    surveyed: () => { setCheck('gen-on', false); setCheck('slope-on', false); usePreset('surveyed'); setCheck('only', true); setCheck('ov-on', true); },
+    general:  () => { setCheck('rare-on', false); setCheck('slope-on', false); setCheck('ov-on', false); setCheck('gen-on', true); },
+    report:   () => { $('open-report').click(); },
+    free:     () => {},
+  };
+  $('welcome').querySelectorAll('button.opt').forEach(b => b.onclick = () => { $('welcome').close(); GO[b.dataset.go](); });
+  $('open-welcome').onclick = () => $('welcome').showModal();
+  $('welcome').showModal();
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
     legend(e.target.value);
