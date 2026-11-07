@@ -10,6 +10,12 @@
   .box { position: absolute; z-index: 1; background: #fffe; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 sans-serif; }
   #panel { top: 10px; left: 10px; max-width: 270px; max-height: calc(100% - 60px); overflow: auto; }
   #legend { bottom: 40px; right: 10px; }
+  #results table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  #results th { position: sticky; top: 0; background: #eee; font-weight: normal; padding: 2px 4px; text-align: right; }
+  #results td { padding: 2px 4px; text-align: right; border-top: 1px solid #eee; }
+  #results th:first-child, #results td:first-child { text-align: left; }
+  #results tr.row { cursor: pointer; }
+  #results tr.row:hover, #results tr.sel { background: #fff3e0; }
   #legend i, #legend2 i { display: inline-block; width: 18px; height: 12px; margin-right: 6px; vertical-align: middle; }
   .sec { border-top: 1px solid #ccc; margin-top: 6px; padding-top: 6px; }
   select { font-size: 13px; }
@@ -68,11 +74,24 @@
     <small>すべての条件を満たす5kmメッシュを強調します。初期値は条件なし（無効）に近い値です。</small>
     <div id="conds"></div>
     該当：<b id="ov-count">-</b> メッシュ
+    <label style="margin-left:8px"><input type="checkbox" id="only"> 該当のみ表示</label>
     <div style="margin-top:4px">
       <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button>
     </div>
     <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
+</div>
+<div id="res-wrap" class="box" style="display:none;top:10px;right:56px;width:300px">
+    <b>該当メッシュ一覧</b><br>
+      並び順：
+      <select id="sort">
+        <option value="n">危惧種の記録数</option>
+        <option value="sp">危惧種の種数</option>
+        <option value="gen">一般記録数</option>
+        <option value="slope">平均傾斜</option>
+      </select>
+      <div id="results" style="max-height:calc(100vh - 270px);overflow:auto;margin-top:4px;border:1px solid #ccc;border-radius:4px;background:#fff"></div>
+      <small>行をクリックすると地図で該当メッシュに移動します。</small>
 </div>
 <div id="legend" class="box"></div>
 <div id="legend2" class="box" style="display:none;bottom:40px;right:150px"><b>傾斜区分（度）</b>
@@ -150,6 +169,8 @@ map.on('load', () => {
     paint: { 'fill-color': '#6a1b9a', 'fill-opacity': 0.35 }, layout: { visibility: 'none' } });
   map.addLayer({ id: 'ov-line', type: 'line', source: 'mesh', filter: ovf(),
     paint: { 'line-color': '#4a148c', 'line-width': 2.5 }, layout: { visibility: 'none' } });
+  map.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ff6f00', 'line-width': 4 } });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   addGen();
   legend($('mode').value);
@@ -176,29 +197,47 @@ map.on('load', () => {
     const f = ovf();
     map.setFilter('ov-fill', f); map.setFilter('ov-line', f);
     $('ov-count').textContent = grid ? hits().length : '-';
+    map.setFilter('mesh', $('only').checked ? ['all', ['>', ['get', 'n'], 0], ovf()] : ['>', ['get', 'n'], 0]);
+    renderResults();
+  }
+  const bboxOf = f => { const c = f.geometry.coordinates[0]; return [[c[0][0], c[0][1]], [c[2][0], c[2][1]]]; };
+  function renderResults() {
+    const on = $('ov-on').checked && grid;
+    $('res-wrap').style.display = on ? 'block' : 'none';
+    if (!on) return;
+    const k = $('sort').value;
+    const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
+    $('results').innerHTML = '<table><tr><th>市町村</th><th>危惧種</th><th>種</th><th>一般</th><th>傾斜</th></tr>' +
+      rows.map((f, i) => { const p = f.properties; return `<tr class="row" data-i="${i}"><td>${p.city}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.gen}</td><td>${p.slope}°</td></tr>`; }).join('') + '</table>';
+    $('results').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => {
+      const f = rows[+tr.dataset.i], b = bboxOf(f);
+      $('results').querySelectorAll('tr.sel').forEach(x => x.classList.remove('sel')); tr.classList.add('sel');
+      map.getSource('sel').setData({ type: 'FeatureCollection', features: [f] });
+      map.fitBounds(b, { maxZoom: 10.5, padding: 120, duration: 600 });
+      new maplibregl.Popup().setLngLat([(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2]).setHTML(popupHtml(f.properties)).addTo(map);
+    });
   }
   const showOv = on => ['ov-fill', 'ov-line'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
-  $('ov-on').onchange = e => { showOv(e.target.checked); if (e.target.checked) $('rare-on').checked || ($('rare-on').checked = true, $('rare-on').onchange({ target: $('rare-on') })); };
+  $('ov-on').onchange = e => { showOv(e.target.checked); renderResults(); if (e.target.checked) $('rare-on').checked || ($('rare-on').checked = true, $('rare-on').onchange({ target: $('rare-on') })); };
   CONDS.forEach(c => $('c-' + c.id).oninput = updateOv);
+  $('only').onchange = updateOv; $('sort').onchange = renderResults;
   $('reset').onclick = () => { CONDS.forEach(c => $('c-' + c.id).value = c.def); updateOv(); };
   const save = (name, type, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   $('dl-geo').onclick = () => save('overlap_mesh.geojson', 'application/geo+json', JSON.stringify({ type: 'FeatureCollection', features: hits() }));
   $('dl-csv').onclick = () => {
-    const rows = ['緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%)'];
+    const rows = ['市町村,緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%)'];
     hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
-      rows.push([((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle].join(',')); });
+      rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
   };
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
     legend(e.target.value);
   };
-  map.on('click', 'mesh', e => {
-    const p = e.features[0].properties;
-    new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
-      `<b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
-      `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`).addTo(map);
-  });
+  const popupHtml = p =>
+      `<b>${p.city}</b><br><b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
+      `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`;
+  map.on('click', 'mesh', e => new maplibregl.Popup().setLngLat(e.lngLat).setHTML(popupHtml(e.features[0].properties)).addTo(map));
   map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'mesh', () => map.getCanvas().style.cursor = '');
 });
