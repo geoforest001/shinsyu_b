@@ -96,9 +96,18 @@
   </div>
 
   <div class="sec">
-    <label><input type="checkbox" id="slope-on"> <b>傾斜区分図</b></label><br>
-    <small>国土地理院DEM10mから作成。</small><br>
-    透明度：<input type="range" id="slope-op" min="20" max="100" value="65" style="width:60%">
+    <label><input type="checkbox" id="slope-on"> <b>傾斜図</b></label><br>
+    区分：
+    <select id="slope-mode">
+      <option value="std">標準（7区分）</option>
+      <option value="walk">歩きやすさ（調査ルート向け）</option>
+      <option value="over">指定した角度以上を強調</option>
+    </select>
+    <div id="slope-over-row" style="display:none">強調する角度：<b id="slope-over-v">30</b>°以上<br>
+      <input type="range" id="slope-over" min="5" max="50" step="1" value="30" style="width:100%"></div>
+    透明度：<input type="range" id="slope-op" min="20" max="100" value="65" style="width:60%"><br>
+    <small>国土地理院の標高タイルから、表示中の範囲をその場で計算します（10m、ズーム15以上は5m）。</small>
+    <small id="slope-hint" style="display:none;color:#b71c1c"><br>この区分はズーム11以上で表示されます。拡大してください。</small>
   </div>
 
   <div class="sec">
@@ -132,6 +141,7 @@
   <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
   <div id="rt-msg" style="margin-top:4px"></div>
   <div class="sec">
+    <label><input type="checkbox" id="rt-slope"> 傾斜図（歩きやすさ）を重ねる</label><br>
     <label><input type="checkbox" id="rt-net"> 対象範囲の道路・林道をすべて表示</label>
     <div class="rt-key" id="rt-key-net" style="display:none"><span><i style="background:#ef6c00"></i>国道</span><span><i style="background:#f9a825"></i>県道など</span><span><i style="background:#9e9e9e"></i>一般道</span><span><i style="background:#795548"></i>林道・農道</span><span><i style="background:#2e7d32"></i>登山道</span></div>
     <div class="rt-key"><span><i style="background:#1565c0"></i>車</span><span><i style="background:#2e7d32"></i>徒歩</span><span><i style="background:#757575"></i>道なし（直線）</span><span><b style="color:#ff6f00">●</b>駐車地点</span></div>
@@ -193,17 +203,10 @@
   <small>開いたレポートの印刷ダイアログで、送信先を「PDFに保存」にしてください。</small>
 </dialog>
 <div id="legend" class="box"></div>
-<div id="legend2" class="box" style="display:none;bottom:40px;right:150px"><b>傾斜区分（度）</b>
-  <div><i style="background:#f7fcb9"></i>0–3（平坦）</div>
-  <div><i style="background:#d9f0a3"></i>3–8</div>
-  <div><i style="background:#addd8e"></i>8–15</div>
-  <div><i style="background:#78c679"></i>15–20</div>
-  <div><i style="background:#fdae61"></i>20–30</div>
-  <div><i style="background:#f46d43"></i>30–40</div>
-  <div><i style="background:#a50026"></i>40以上（急傾斜）</div>
-</div>
+<div id="legend2" class="box" style="display:none;bottom:40px;right:150px"></div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="slope.js"></script>
 <script src="route.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -255,10 +258,16 @@ const addGen = () => {
 };
 
 map.on('load', () => {
+  // 傾斜図: ズーム11未満は事前計算タイル（標準7区分のみ）、11以上はブラウザ内計算（slope.js）
+  // 縮小時に標高タイルから直接計算すると画素が粗く（z10で約120m）傾斜が緩く出るため、縮小表示は事前計算に任せる
+  const SLOPE_LIVE_Z = 11;
   map.addSource('slope', { type: 'raster', tileSize: 256, minzoom: 7, maxzoom: 13,
     tiles: [new URL('data/slope_tiles/{z}/{x}/{y}.png', location.href).href.replace(/%7B/g, '{').replace(/%7D/g, '}')],
     attribution: '傾斜: 国土地理院DEM10m' });
-  map.addLayer({ id: 'slope', type: 'raster', source: 'slope', paint: { 'raster-opacity': 0.65 }, layout: { visibility: 'none' } });
+  map.addLayer({ id: 'slope', type: 'raster', source: 'slope', maxzoom: SLOPE_LIVE_Z, paint: { 'raster-opacity': 0.65 }, layout: { visibility: 'none' } });
+  map.addSource('slope-live', { type: 'raster', tileSize: 256, minzoom: SLOPE_LIVE_Z, maxzoom: Slope.MAX_DEM_Z, tiles: [Slope.tileUrl()],
+    attribution: '傾斜: 国土地理院 標高タイルから計算' });
+  map.addLayer({ id: 'slope-live', type: 'raster', source: 'slope-live', minzoom: SLOPE_LIVE_Z, paint: { 'raster-opacity': 0.65, 'raster-fade-duration': 0 }, layout: { visibility: 'none' } });
   map.addSource('mesh', { type: 'geojson', data: 'data/grid_nagano.geojson' });
   map.addLayer({ id: 'mesh', type: 'fill', source: 'mesh',
     filter: ['>', ['get', 'n'], 0],
@@ -302,11 +311,29 @@ map.on('load', () => {
     $('legend').style.display = e.target.checked ? 'block' : 'none';
   };
   $('taxon').onchange = addGen;
-  $('slope-on').onchange = e => {
-    map.setLayoutProperty('slope', 'visibility', e.target.checked ? 'visible' : 'none');
-    $('legend2').style.display = e.target.checked ? 'block' : 'none';
+  const updateSlope = () => {
+    const on = $('slope-on').checked, std = Slope.mode === 'std';
+    map.setLayoutProperty('slope', 'visibility', on && std ? 'visible' : 'none');
+    map.setLayoutProperty('slope-live', 'visibility', on ? 'visible' : 'none');
+    $('legend2').style.display = on ? 'block' : 'none';
+    $('legend2').innerHTML = Slope.legendHtml();
+    $('slope-hint').style.display = on && !std && map.getZoom() < SLOPE_LIVE_Z ? '' : 'none';
   };
-  $('slope-op').oninput = e => map.setPaintProperty('slope', 'raster-opacity', e.target.value / 100);
+  const setSlopeMode = () => {
+    const m = $('slope-mode').value;
+    $('slope-over-row').style.display = m === 'over' ? '' : 'none';
+    $('slope-over-v').textContent = $('slope-over').value;
+    Slope.setMode(m, +$('slope-over').value);
+    map.getSource('slope-live').setTiles([Slope.tileUrl()]);
+    updateSlope();
+  };
+  $('slope-on').onchange = updateSlope;
+  $('slope-mode').onchange = setSlopeMode;
+  let slopeTimer = 0;  // スライダーを動かしている間は描き直しを間引く
+  $('slope-over').oninput = () => { $('slope-over-v').textContent = $('slope-over').value; clearTimeout(slopeTimer); slopeTimer = setTimeout(setSlopeMode, 150); };
+  $('slope-op').oninput = e => ['slope', 'slope-live'].forEach(l => map.setPaintProperty(l, 'raster-opacity', e.target.value / 100));
+  map.on('zoomend', updateSlope);
+  updateSlope();
 
   // --- 重なり抽出 ---
   let grid = null;
@@ -477,6 +504,11 @@ map.on('load', () => {
   $('rt-open').onclick = () => openRoute(true);
   $('rt-close').onclick = () => openRoute(false);
   $('rt-net').onchange = e => { Route.showNetwork(e.target.checked); $('rt-key-net').style.display = e.target.checked ? '' : 'none'; };
+  $('rt-slope').onchange = e => {
+    if (e.target.checked) { $('slope-mode').value = 'walk'; setSlopeMode(); }
+    $('slope-on').checked = e.target.checked; updateSlope();
+  };
+  $('slope-on').addEventListener('change', () => $('rt-slope').checked = $('slope-on').checked && Slope.mode === 'walk');
   $('rt-locate').onclick = () => Route.locate();
   document.querySelectorAll('#rt-panel [data-pick]').forEach(b => b.onclick = () => Route.pick(b.dataset.pick));
   $('rt-swap').onclick = () => Route.swap();
@@ -501,6 +533,13 @@ map.on('load', () => {
   const popupNode = (props, ll) => {
     const div = document.createElement('div');
     div.innerHTML = props ? popupHtml(props) : '<b>この地点</b>';
+    if ($('slope-on').checked || !props) {  // 傾斜図の表示中（または地点だけのとき）は、その地点の標高と傾斜も出す
+      const info = document.createElement('div');
+      info.innerHTML = '<small>標高・傾斜を読み込み中…</small>';
+      div.append(info);
+      Slope.pointInfo([ll.lng, ll.lat]).then(r => info.innerHTML = r
+        ? `<small>クリック地点：標高 <b>${Math.round(r.elev)} m</b>・傾斜 <b>${r.slope.toFixed(0)}°</b></small>` : '<small>この地点の標高データはありません</small>');
+    }
     if (document.body.classList.contains('route-open')) {
       const btn = (w, t) => { const b = document.createElement('button'); b.className = 'rt-go'; b.textContent = t;
         b.onclick = () => { pop.remove(); Route.setPoint(w, [ll.lng, ll.lat], props ? `${props.city}のメッシュ` : '地図で選んだ地点'); }; return b; };
@@ -513,7 +552,7 @@ map.on('load', () => {
     if (Route.handleClick([e.lngLat.lng, e.lngLat.lat])) return;
     const f = map.getLayer('mesh') && map.getLayoutProperty('mesh', 'visibility') !== 'none' ? map.queryRenderedFeatures(e.point, { layers: ['mesh'] })[0] : null;
     if (f) popupNode(f.properties, e.lngLat).addTo(map);
-    else if (document.body.classList.contains('route-open')) popupNode(null, e.lngLat).addTo(map);
+    else if (document.body.classList.contains('route-open') || $('slope-on').checked) popupNode(null, e.lngLat).addTo(map);
   });
   map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'mesh', () => map.getCanvas().style.cursor = '');
