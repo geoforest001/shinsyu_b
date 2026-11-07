@@ -9,7 +9,7 @@
   html, body, #map { margin: 0; height: 100%; }
   .box { position: absolute; z-index: 1; background: #fffe; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 sans-serif; }
   #panel { top: 10px; left: 10px; max-width: 270px; max-height: calc(100% - 60px); overflow: auto; }
-  #legend { bottom: 28px; left: 10px; }
+  #legend { bottom: 40px; right: 10px; }
   #legend i, #legend2 i { display: inline-block; width: 18px; height: 12px; margin-right: 6px; vertical-align: middle; }
   .sec { border-top: 1px solid #ccc; margin-top: 6px; padding-top: 6px; }
   select { font-size: 13px; }
@@ -64,21 +64,18 @@
   </div>
 
   <div class="sec">
-    <label><input type="checkbox" id="ov-on"> <b>重なりを抽出</b></label><br>
-    <small>下の条件を両方満たす5kmメッシュを強調します。</small><br>
-    危惧種の記録数 ≧ <b id="ov-r-v">3</b><br>
-    <input type="range" id="ov-r" min="1" max="30" value="3" style="width:100%"><br>
-    一般記録数 ≧ <b id="ov-g-v">1000</b>（中央値 約600）<br>
-    <input type="range" id="ov-g" min="0" max="5000" step="100" value="1000" style="width:100%"><br>
+    <label><input type="checkbox" id="ov-on"> <b>絞り込み（条件に合うメッシュを抽出）</b></label><br>
+    <small>すべての条件を満たす5kmメッシュを強調します。初期値は条件なし（無効）に近い値です。</small>
+    <div id="conds"></div>
     該当：<b id="ov-count">-</b> メッシュ
     <div style="margin-top:4px">
-      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button>
+      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button>
     </div>
-    <small>一般記録には危惧種の記録も含まれます。</small>
+    <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
 </div>
 <div id="legend" class="box"></div>
-<div id="legend2" class="box" style="display:none;bottom:28px;left:170px"><b>傾斜区分（度）</b>
+<div id="legend2" class="box" style="display:none;bottom:40px;right:150px"><b>傾斜区分（度）</b>
   <div><i style="background:#f7fcb9"></i>0–3（平坦）</div>
   <div><i style="background:#d9f0a3"></i>3–8</div>
   <div><i style="background:#addd8e"></i>8–15</div>
@@ -99,6 +96,19 @@ function legend(f) {
   const rows = COLORS.map((c, i) => `<div><i style="background:${c}"></i>${i < 3 ? (s[i] === s[i + 1] - 1 ? s[i] : s[i] + '–' + (s[i + 1] - 1)) : s[3] + '以上'}</div>`);
   $('legend').innerHTML = '<b>絶滅危惧種：' + (f === 'n' ? '記録数' : '種数') + '</b>' + rows.join('');
 }
+// 絞り込み条件: prop=メッシュ属性, op=比較, def=初期値(ほぼ無効)
+const CONDS = [
+  { id: 'r',  prop: 'n',      op: '>=', min: 1,  max: 30,   step: 1,   def: 3,    label: '危惧種の記録数 ≧' },
+  { id: 'g',  prop: 'gen',    op: '>=', min: 0,  max: 5000, step: 100, def: 1000, label: '一般記録数 ≧', note: '（中央値 約600）' },
+  { id: 'sa', prop: 'slope',  op: '>=', min: 0,  max: 45,   step: 1,   def: 0,    label: '平均傾斜 ≧', unit: '°' },
+  { id: 'sb', prop: 'slope',  op: '<=', min: 0,  max: 45,   step: 1,   def: 45,   label: '平均傾斜 ≦', unit: '°' },
+  { id: 'st', prop: 'steep',  op: '<=', min: 0,  max: 100,  step: 5,   def: 100,  label: '急傾斜(30°以上)の割合 ≦', unit: '%' },
+  { id: 'ge', prop: 'gentle', op: '>=', min: 0,  max: 100,  step: 5,   def: 0,    label: '緩傾斜(8°未満)の割合 ≧', unit: '%' },
+];
+$('conds').innerHTML = CONDS.map(c => `<div style="margin-top:4px">${c.label} <b id="v-${c.id}">${c.def}</b>${c.unit || ''}${c.note || ''}<br>
+  <input type="range" id="c-${c.id}" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.def}" style="width:100%"></div>`).join('');
+const OPS = { '>=': (a, b) => a >= b, '<=': (a, b) => a <= b };
+const condVal = c => +$('c-' + c.id).value;
 const tiles = () => 'https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?srs=EPSG:3857&bin=hex&hexPerTile=50&style=green2.poly&country=JP'
   + ($('taxon').value ? '&taxonKey=' + $('taxon').value : '');
 
@@ -135,7 +145,7 @@ map.on('load', () => {
     paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.55, 'fill-outline-color': '#ffffff99' },
     layout: { visibility: $('rare-on').checked ? 'visible' : 'none' } });
   map.addSource('mask', { type: 'geojson', data: 'data/nagano_mask.geojson' });
-  const ovf = () => ['all', ['>=', ['get', 'n'], +$('ov-r').value], ['>=', ['get', 'gen'], +$('ov-g').value]];
+  const ovf = () => ['all', ...CONDS.map(c => [c.op, ['get', c.prop], condVal(c)])];
   map.addLayer({ id: 'ov-fill', type: 'fill', source: 'mesh', filter: ovf(),
     paint: { 'fill-color': '#6a1b9a', 'fill-opacity': 0.35 }, layout: { visibility: 'none' } });
   map.addLayer({ id: 'ov-line', type: 'line', source: 'mesh', filter: ovf(),
@@ -160,22 +170,23 @@ map.on('load', () => {
   // --- 重なり抽出 ---
   let grid = null;
   fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; updateOv(); });
-  const hits = () => grid ? grid.features.filter(f => f.properties.n >= +$('ov-r').value && f.properties.gen >= +$('ov-g').value) : [];
+  const hits = () => grid ? grid.features.filter(f => CONDS.every(c => OPS[c.op](f.properties[c.prop], condVal(c)))) : [];
   function updateOv() {
-    $('ov-r-v').textContent = $('ov-r').value; $('ov-g-v').textContent = $('ov-g').value;
+    CONDS.forEach(c => $('v-' + c.id).textContent = condVal(c));
     const f = ovf();
     map.setFilter('ov-fill', f); map.setFilter('ov-line', f);
     $('ov-count').textContent = grid ? hits().length : '-';
   }
   const showOv = on => ['ov-fill', 'ov-line'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
   $('ov-on').onchange = e => { showOv(e.target.checked); if (e.target.checked) $('rare-on').checked || ($('rare-on').checked = true, $('rare-on').onchange({ target: $('rare-on') })); };
-  $('ov-r').oninput = updateOv; $('ov-g').oninput = updateOv;
+  CONDS.forEach(c => $('c-' + c.id).oninput = updateOv);
+  $('reset').onclick = () => { CONDS.forEach(c => $('c-' + c.id).value = c.def); updateOv(); };
   const save = (name, type, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   $('dl-geo').onclick = () => save('overlap_mesh.geojson', 'application/geo+json', JSON.stringify({ type: 'FeatureCollection', features: hits() }));
   $('dl-csv').onclick = () => {
-    const rows = ['緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数'];
+    const rows = ['緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%)'];
     hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
-      rows.push([((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen].join(',')); });
+      rows.push([((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
   };
   $('mode').onchange = e => {
@@ -185,7 +196,7 @@ map.on('load', () => {
   map.on('click', 'mesh', e => {
     const p = e.features[0].properties;
     new maplibregl.Popup().setLngLat(e.lngLat).setHTML(
-      `<b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
+      `<b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`).addTo(map);
   });
   map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');
