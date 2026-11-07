@@ -76,7 +76,7 @@
     該当：<b id="ov-count">-</b> メッシュ
     <label style="margin-left:8px"><input type="checkbox" id="only"> 該当のみ表示</label>
     <div style="margin-top:4px">
-      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button>
+      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button> <button id="open-report">PDFレポート作成…</button>
     </div>
     <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
@@ -93,6 +93,32 @@
       <div id="results" style="max-height:calc(100vh - 270px);overflow:auto;margin-top:4px;border:1px solid #ccc;border-radius:4px;background:#fff"></div>
       <small>行をクリックすると地図で該当メッシュに移動します。</small>
 </div>
+<dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
+  <b style="font-size:15px">PDFレポート作成</b>
+  <div style="margin-top:8px">条件：
+    <select id="preset">
+      <option value="cur">現在の絞り込み条件のまま</option>
+      <option value="many">危惧種が多いメッシュ（記録10件以上）</option>
+      <option value="steep">急傾斜域の危惧種（平均傾斜30°以上）</option>
+      <option value="gentle">緩傾斜域の危惧種（平均傾斜15°以下）</option>
+      <option value="surveyed">調査が進み危惧種も多い（一般3000件以上）</option>
+    </select>
+  </div>
+  <div><small id="preset-sum"></small></div>
+  <div style="margin-top:6px">一覧の並び順：
+    <select id="rsort">
+      <option value="n">危惧種の記録数</option><option value="sp">危惧種の種数</option>
+      <option value="gen">一般記録数</option><option value="slope">平均傾斜</option>
+    </select>
+  </div>
+  <div style="margin-top:6px">含める内容：<br>
+    <label><input type="checkbox" id="inc-map" checked> 地図</label>
+    <label><input type="checkbox" id="inc-city" checked> 市町村別集計</label>
+    <label><input type="checkbox" id="inc-list" checked> メッシュ一覧</label>
+  </div>
+  <div style="margin-top:10px"><button id="make">レポートを開く</button> <button id="close-dlg">閉じる</button></div>
+  <small>開いたレポートの印刷ダイアログで、送信先を「PDFに保存」にしてください。</small>
+</dialog>
 <div id="legend" class="box"></div>
 <div id="legend2" class="box" style="display:none;bottom:40px;right:150px"><b>傾斜区分（度）</b>
   <div><i style="background:#f7fcb9"></i>0–3（平坦）</div>
@@ -140,7 +166,8 @@ const map = new maplibregl.Map({
       attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a> | データ: <a href="https://www.gbif.org">GBIF</a>' } },
     layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }]
   },
-  center: [138.0, 36.15], zoom: 7.3
+  center: [138.0, 36.15], zoom: 7.3,
+  preserveDrawingBuffer: true
 });
 map.addControl(new maplibregl.NavigationControl());
 
@@ -229,6 +256,91 @@ map.on('load', () => {
     hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
       rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
+  };
+  // --- PDFレポート ---
+  const PRESETS = {
+    cur: null,
+    many: { r: 10, g: 0 },
+    steep: { r: 3, g: 0, sa: 30 },
+    gentle: { r: 3, g: 0, sb: 15 },
+    surveyed: { r: 10, g: 3000 },
+  };
+  const OFF = { sa: 0, sb: 45, st: 100, ge: 0 };
+  const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const condText = () => CONDS.map(c => {
+    const v = condVal(c), off = c.id in OFF && v === OFF[c.id];
+    return `<tr><td>${esc(c.label)}</td><td>${off ? '指定なし' : v + (c.unit || '')}</td></tr>`;
+  }).join('');
+  const applyPreset = () => {
+    const pr = PRESETS[$('preset').value];
+    if (pr) { CONDS.forEach(c => $('c-' + c.id).value = c.id in pr ? pr[c.id] : c.def); updateOv(); }
+    $('preset-sum').textContent = '該当：' + hits().length + ' メッシュ';
+  };
+  $('open-report').onclick = () => { $('preset').value = 'cur'; applyPreset(); $('dlg').showModal(); };
+  $('close-dlg').onclick = () => $('dlg').close();
+  $('preset').onchange = applyPreset;
+  $('make').onclick = async () => {
+    const w = window.open('', '_blank');
+    if (!w) { alert('ポップアップがブロックされました。許可してからもう一度お試しください。'); return; }
+    w.document.write('<p style="font:14px sans-serif">レポートを作成中…</p>');
+    $('dlg').close();
+    const k = $('rsort').value;
+    const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
+    let img = '';
+    if ($('inc-map').checked) {
+      const prev = { c: map.getCenter(), z: map.getZoom(), ov: $('ov-on').checked, only: $('only').checked };
+      document.querySelectorAll('.maplibregl-popup').forEach(x => x.remove());
+      map.getSource('sel').setData({ type: 'FeatureCollection', features: [] });
+      showOv(true);
+      map.setFilter('ov-fill', ovf()); map.setFilter('ov-line', ovf());
+      map.fitBounds([[137.3, 35.15], [138.85, 37.1]], { padding: 10, duration: 0 });
+      await new Promise(r => { map.once('idle', r); setTimeout(r, 8000); });
+      try {
+        const cv = map.getCanvas(), r = cv.width / cv.clientWidth;
+        const a = map.project([137.3, 37.1]), b = map.project([138.85, 35.15]);
+        const x = Math.max(0, a.x * r), y = Math.max(0, a.y * r);
+        const cw = Math.min(cv.width - x, (b.x - a.x) * r), ch = Math.min(cv.height - y, (b.y - a.y) * r);
+        const o = document.createElement('canvas'); o.width = cw; o.height = ch;
+        o.getContext('2d').drawImage(cv, x, y, cw, ch, 0, 0, cw, ch);
+        img = o.toDataURL('image/jpeg', 0.85);
+      } catch (e) { img = ''; }
+      showOv(prev.ov); map.jumpTo({ center: prev.c, zoom: prev.z });
+    }
+    const byCity = {};
+    rows.forEach(f => { const p = f.properties, c = byCity[p.city] = byCity[p.city] || { m: 0, n: 0, g: 0, s: 0 };
+      c.m++; c.n += p.n; c.g += p.gen; c.s += p.slope; });
+    const cityRows = Object.entries(byCity).sort((a, b) => b[1].n - a[1].n).map(([name, c]) =>
+      `<tr><td>${esc(name)}</td><td>${c.m}</td><td>${c.n}</td><td>${c.g}</td><td>${(c.s / c.m).toFixed(1)}°</td></tr>`).join('');
+    const listRows = rows.map(f => { const p = f.properties, c = f.geometry.coordinates[0];
+      return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.CR}/${p.EN}/${p.VU}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td></tr>`; }).join('');
+    const d = new Date(), ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>長野県 絶滅危惧種 分布レポート</title><style>
+      @page { size: A4; margin: 14mm; }
+      body { font: 12px/1.6 'Hiragino Sans','Yu Gothic',sans-serif; color: #111; }
+      h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; border-bottom: 2px solid #2e7d32; margin: 16px 0 6px; padding-bottom: 2px; }
+      table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #bbb; padding: 2px 6px; font-size: 11px; text-align: right; }
+      th { background: #eee; } td:first-child, th:first-child { text-align: left; }
+      thead { display: table-header-group; } tr { page-break-inside: avoid; }
+      .cond td:last-child { text-align: left; width: 35%; } img { display: block; margin: 0 auto; max-width: 100%; max-height: 150mm; border: 1px solid #bbb; }
+      .legend span { display: inline-block; margin-right: 10px; } .legend i { display: inline-block; width: 14px; height: 10px; margin-right: 4px; }
+      small { color: #555; } .noprint { margin: 8px 0; } @media print { .noprint { display: none; } }
+    </style></head><body>
+    <div class="noprint"><button onclick="print()">印刷 / PDFに保存</button></div>
+    <h1>長野県 絶滅危惧種 分布レポート</h1>
+    <small>作成日：${ds} ／ 該当 ${rows.length} メッシュ（5km）／ 危惧種の記録 合計 ${rows.reduce((a, f) => a + f.properties.n, 0)} 件</small>
+    <h2>1. 抽出条件</h2>
+    <table class="cond"><tr><th>条件</th><th>値</th></tr>${condText()}</table>
+    ${img ? `<h2>2. 該当メッシュの分布</h2><img src="${img}"><div class="legend"><small>紫の枠＝条件に合うメッシュ。黄〜赤＝危惧種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。</small></div>` : ''}
+    ${$('inc-city').checked ? `<h2>3. 市町村別集計</h2><table><tr><th>市町村</th><th>メッシュ数</th><th>危惧種 記録数</th><th>一般記録数</th><th>平均傾斜</th></tr>${cityRows}</table>` : ''}
+    ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>危惧種 記録</th><th>種数</th><th>CR/EN/VU</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
+    <h2>注意事項・出典</h2>
+    <small>・危惧種は IUCN レッドリスト CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計。希少種保護のため個別の位置は掲載していません。<br>
+    ・記録数は調査の多さを反映します。記録の多い場所が、必ずしも生き物の多い場所とは限りません。<br>
+    ・一般記録数には危惧種の記録も含まれます。緯度経度はメッシュの中心です。市町村は中心点の所在地です。<br>
+    ・傾斜は国土地理院DEM10mから集計。出典：GBIF（gbif.org）、国土地理院。</small>
+    </body></html>`;
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(() => w.print(), 700);
   };
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
