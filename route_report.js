@@ -171,6 +171,7 @@ const RouteReport = (() => {
       .dot { display: inline-block; width: 15px; height: 15px; border-radius: 50%; color: #fff; font-size: 9px; text-align: center; line-height: 15px; margin-right: 3px; vertical-align: middle; }
       .slope div { display: inline-block; margin-right: 10px; } .slope i { display: inline-block; width: 14px; height: 10px; margin-right: 3px; vertical-align: middle; }
       .prof { max-width: 110mm; margin-top: 8px; page-break-inside: avoid; }
+      .course { max-width: 150mm; margin-top: 8px; page-break-inside: avoid; }
       ul { margin: 2px 0; padding-left: 1.4em; } li { margin: 2px 0; } .warn { color: #b71c1c; } .credit li { font-size: 11px; color: #333; }
       small { color: #555; } a { color: #1565c0; } .noprint { margin: 8px 0; } @media print { .noprint { display: none; } }
     </style></head><body>
@@ -187,6 +188,7 @@ const RouteReport = (() => {
     <h2>${img ? 2 : 1}. 凡例</h2>${legend()}
     <h2>${img ? 3 : 2}. ルート案内</h2>
     <table><tr><th>No</th><th>区間</th><th>手段</th><th>距離</th><th>所要時間</th><th>累計</th><th>備考</th></tr>${steps(r)}</table>
+    ${r.course ? `<div class="course">${r.course}</div>` : ''}
     ${r.profile ? `<div class="prof">${r.profile}</div>` : ''}
     <h2>${img ? 4 : 3}. ルート上の注意事項</h2>
     ${nt.route.length ? `<b>この経路について</b><ul class="route-notes">${nt.route.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}

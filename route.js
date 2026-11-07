@@ -193,6 +193,89 @@ const Route = (() => {
       </svg><small>緑＝道あり、灰＝道なし、赤＝${STEEP_DEG}°以上の急斜面。目的地の標高 ${Math.round(pts[pts.length - 1][1])} m</small></div>`;
   }
 
+  // ---- コース全体の標高断面図（箱根駅伝のコース紹介のような面グラフ）----
+  // 出発地から目的地まで（車・徒歩・道なし）の標高を1本の面グラフにし、出発地・駐車地点・最高点・目的地と、
+  // 途中の地名（国土地理院の逆ジオコーダ）を縦書きの ▼ ラベルで示す。標高は国土地理院 DEM（橋・トンネルは地表の高さ）。
+  const MODE_COL = ['#1565c0', '#2e7d32', '#757575'];  // 0=車 1=徒歩 2=道なし
+  const shortLabel = (t, fallback) => { t = String(t || '').trim(); return !t || /^(北緯|地図|現在地)/.test(t) ? fallback : (t.length > 6 ? t.slice(0, 6) : t); };
+  async function townName(ll) {
+    try {
+      const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 4000);
+      const r = await (await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${ll[1].toFixed(5)}&lon=${ll[0].toFixed(5)}`, { signal: ac.signal })).json();
+      clearTimeout(tm);
+      const n = (r.results && r.results.lv01Nm || '').replace(/^(大字|字)/, '').replace(/[0-9０-９一二三四五六七八九十丁目]+$/, '');
+      return n.length >= 2 ? n.slice(0, 6) : '';
+    } catch (e) { return ''; }
+  }
+  const niceStep = (span, maxTicks, steps) => steps.find(st => span / st <= maxTicks) || steps[steps.length - 1];
+  async function courseProfile(R) {
+    const seq = [];  // [経度, 緯度, 手段]
+    const push = (ll, m) => { const q = seq[seq.length - 1]; if (!q || q[0] !== ll[0] || q[1] !== ll[1]) seq.push([ll[0], ll[1], m]); };
+    push(R.start, 2); push(R.startNode, 2);
+    R.lines[CAR].forEach(l => l.coords.forEach(c => push(c, 0)));
+    R.lines[FOOT].forEach(l => l.coords.forEach(c => push(c, 1)));
+    (R.offLL.length ? R.offLL : [R.goalNode]).forEach(c => push(c, 2)); push(R.goal, 2);
+    if (seq.length < 2) return '';
+    const cum = [0]; for (let i = 1; i < seq.length; i++) cum.push(cum[i - 1] + distM(seq[i - 1], seq[i]));
+    const D = cum[cum.length - 1]; if (D < 30) return '';
+    // 等間隔に並べ直す（最大およそ320点）
+    const step = Math.max(25, D / 320), S = [];
+    for (let d = 0, k = 1; d <= D + 1e-6; d += step) {
+      while (k < seq.length - 1 && cum[k] < d) k++;
+      const a = seq[k - 1], b = seq[k], t = cum[k] > cum[k - 1] ? Math.min(1, (d - cum[k - 1]) / (cum[k] - cum[k - 1])) : 0;
+      S.push({ d, ll: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], m: b[2] });
+    }
+    if (S[S.length - 1].d < D - 1) S.push({ d: D, ll: seq[seq.length - 1].slice(0, 2), m: seq[seq.length - 1][2] });
+    // 標高タイルを経路に沿って読む（約600mおき）
+    const stops = S.filter((_, i) => i % Math.max(1, Math.round(600 / step)) === 0).map(s => s.ll);
+    for (let i = 0; i < stops.length; i += 8) await Promise.all(stops.slice(i, i + 8).map(ll => Slope.prefetch([ll, ll]).catch(() => {})));
+    S.forEach(s => { s.h = Slope.elevAt(s.ll); });
+    const ok = S.filter(s => !isNaN(s.h)); if (ok.length < 2) return '';
+    S.forEach((s, i) => { if (isNaN(s.h)) { let a = i - 1, b = i + 1; while (a >= 0 && isNaN(S[a].h)) a--; while (b < S.length && isNaN(S[b].h)) b++;
+      s.h = a < 0 ? S[b].h : b >= S.length ? S[a].h : S[a].h + (S[b].h - S[a].h) * (s.d - S[a].d) / (S[b].d - S[a].d); } });
+    let up = 0, down = 0; for (let i = 1; i < S.length; i++) { const dh = S[i].h - S[i - 1].h; if (Math.abs(dh) > 0.5) (dh > 0 ? up += dh : down -= dh); }
+    // ラベル：出発地・駐車地点・最高点・目的地 ＋ 途中の地名
+    const hi = S.reduce((m, s) => s.h > m.h ? s : m, S[0]);
+    const marks = [{ d: 0, name: shortLabel(R.labels.start, '出発地') }, { d: D, name: shortLabel(R.labels.goal, '目的地') }];
+    if (R.park) { const pd = S.reduce((m, s) => distM(s.ll, R.park) < distM(m.ll, R.park) ? s : m, S[0]); marks.push({ d: pd.d, name: 'P駐車地点' }); }
+    if (hi.d > D * 0.08 && hi.d < D * 0.92) marks.push({ d: hi.d, name: '最高点' });
+    const cand = [0.25, 0.5, 0.75].map(f => S.reduce((m, s) => Math.abs(s.d - D * f) < Math.abs(m.d - D * f) ? s : m, S[0]))
+      .filter(c => marks.every(m => Math.abs(m.d - c.d) > D * 0.13));
+    const towns = await Promise.all(cand.map(c => townName(c.ll)));
+    cand.forEach((c, i) => { if (towns[i] && marks.every(m => m.name !== towns[i])) marks.push({ d: c.d, name: towns[i] }); });
+    marks.sort((a, b) => a.d - b.d);
+    // 描画
+    const W = 360, H = 262, ml = 42, mr = 14, mt = 92, mb = 46;
+    const hs = S.map(s => s.h), mn = Math.min(...hs), mx = Math.max(...hs), sp0 = Math.max(20, mx - mn);
+    const ys = niceStep(sp0 * 1.15, 4, [10, 20, 50, 100, 200, 500, 1000]);
+    const lo = Math.floor((mn - sp0 * 0.08) / ys) * ys, top = Math.ceil((mx + sp0 * 0.04) / ys) * ys;
+    const X = d => ml + d / D * (W - ml - mr), Y = h => mt + (1 - (h - lo) / (top - lo)) * (H - mt - mb), yb = H - mb;
+    const xs = niceStep(D / 1000, 6, [0.5, 1, 2, 5, 10, 20]);
+    let grid = '', xt = '';
+    for (let h = lo; h <= top + 1e-6; h += ys) grid += `<line x1="${ml}" y1="${Y(h).toFixed(1)}" x2="${W - mr}" y2="${Y(h).toFixed(1)}" stroke="#ccc" stroke-width="0.7"/><text x="${ml - 5}" y="${(Y(h) + 4).toFixed(1)}" font-size="12" text-anchor="end" fill="#222">${h}</text>`;
+    for (let k = 0; k * xs * 1000 <= D + 1e-6; k++) { const x = X(k * xs * 1000).toFixed(1);
+      xt += `<line x1="${x}" y1="${yb}" x2="${x}" y2="${yb + 4}" stroke="#222"/><text x="${x}" y="${yb + 16}" font-size="11" text-anchor="middle" fill="#222">${+(k * xs).toFixed(1)}</text>`; }
+    const area = `M${X(0).toFixed(1)},${yb}` + S.map(s => `L${X(s.d).toFixed(1)},${Y(s.h).toFixed(1)}`).join('') + `L${X(D).toFixed(1)},${yb}Z`;
+    let strip = '';
+    for (let i = 1; i < S.length; i++) strip += `<rect x="${X(S[i - 1].d).toFixed(1)}" y="${yb + 20}" width="${(X(S[i].d) - X(S[i - 1].d) + 0.6).toFixed(1)}" height="4" fill="${MODE_COL[S[i].m]}"/>`;
+    // ラベルが重ならないよう、右から順に最低15pxあけて左へずらす（▼は元の位置のまま）
+    const mx0 = marks.map(m => Math.min(W - mr - 6, Math.max(ml + 6, X(m.d)))), lx = mx0.slice();
+    for (let i = lx.length - 2; i >= 0; i--) lx[i] = Math.min(lx[i], lx[i + 1] - 15);
+    const markSvg = marks.map((m, i) => { const s = S.reduce((q, r) => Math.abs(r.d - m.d) < Math.abs(q.d - m.d) ? r : q, S[0]);
+      const x = mx0[i], tx = lx[i], ty = Y(s.h) - 4, n = [...m.name].length, len = n * 13 + 2, y0 = Math.max(4, ty - 12 - len);
+      return `<polygon points="${(x - 5).toFixed(1)},${(ty - 9).toFixed(1)} ${(x + 5).toFixed(1)},${(ty - 9).toFixed(1)} ${x.toFixed(1)},${ty.toFixed(1)}" fill="#222"/>
+        <text x="${tx.toFixed(1)}" y="${y0.toFixed(1)}" font-size="12" font-weight="bold" fill="#111" style="writing-mode:vertical-rl;text-orientation:upright">${xml(m.name)}</text>`; }).join('');
+    const arrow = `<line x1="${ml + 4}" y1="${H - 6}" x2="${W - mr - 4}" y2="${H - 6}" stroke="#e9a29a" stroke-width="3"/><polygon points="${W - mr - 4},${H - 11} ${W - mr + 4},${H - 6} ${W - mr - 4},${H - 1}" fill="#e9a29a"/>`;
+    const km = D >= 1000 ? (D / 1000).toFixed(1) + ' km' : Math.round(D) + ' m';
+    return `<div class="course" style="margin-top:6px"><b>コース全体の断面図</b> <small>全長 ${km}・登り ${Math.round(up)} m・下り ${Math.round(down)} m</small>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;background:#fff;border:1px solid #ddd;border-radius:4px" role="img" aria-label="コース全体の標高断面図">
+        <text x="6" y="${mt - 8}" font-size="12" fill="#222">(m)</text>${grid}
+        <path d="${area}" fill="#d9534f" fill-opacity="0.9" stroke="#b83a30" stroke-width="1"/>
+        <line x1="${ml}" y1="${yb}" x2="${W - mr}" y2="${yb}" stroke="#222"/>${xt}
+        ${strip}${markSvg}${arrow}
+      </svg><small><span style="color:#1565c0">■</span>車 <span style="color:#2e7d32">■</span>徒歩 <span style="color:#757575">■</span>道なし ／ 横軸は距離（km）。出発地 ${Math.round(S[0].h)} m → 最高点 ${Math.round(hi.h)} m → 目的地 ${Math.round(S[S.length - 1].h)} m。標高は国土地理院DEM（橋・トンネルは地表の高さ）。</small></div>`;
+  }
+
   // ---- 経路探索 ----
   async function run() {
     if (!pts.start || !pts.goal) { onMsg('出発地と目的地の両方を決めてください。'); return; }
@@ -302,6 +385,7 @@ const Route = (() => {
       ${boff >= 1 ? `<tr><td><i style="background:#757575"></i>道なし（直線）</td><td>${Math.round(boff)} m</td><td>${mins(offS)}</td></tr>` : ''}
       ${off.steepM >= 1 ? `<tr><td colspan="3"><small style="color:#b71c1c">　うち${STEEP_DEG}°以上の急斜面 ${Math.round(off.steepM)} m（最大 ${Math.round(off.maxDeg)}°・赤い線）</small></td></tr>` : ''}
       <tr><td><b>合計</b></td><td></td><td><b>${mins(sum[CAR][1] + sum[FOOT][1] + offS + (park !== null ? PARK_SEC : 0))}</b></td></tr></table>
+      <div id="rt-course"><small>コース全体の断面図を作成中…</small></div>
       ${prof}
       ${parkC ? `<small>駐車地点（P）：北緯 ${parkC[1].toFixed(5)}° 東経 ${parkC[0].toFixed(5)}°</small><br>` : ''}
       <small>出発地から最寄りの道まで ${Math.round(sd)} m は直線で表示しています。</small><br>
@@ -312,6 +396,11 @@ const Route = (() => {
         <li>考慮している：徒歩区間の登り下り（Tobler の歩行関数、国土地理院の標高10m）、道のない区間の斜面の傾斜</li>
         <li>考慮していない：路面状況・積雪・藪の濃さ</li>
         ${G.hasTob ? '' : '<li>このグラフには登り下りの係数がないため、道のある区間は平地として計算しています。</li>'}</ul></div>`);
+    // コース全体の断面図は、標高と地名を読むので、表示のあとで差し込む
+    const snap = last;
+    courseProfile({ start, startNode, goal, goalNode, park: parkC, lines, offLL: off.samples.map(q => q.ll), labels: { start: pts.start.label, goal: pts.goal.label } })
+      .then(h => { if (last !== snap) return; snap.course = h; const el = document.getElementById('rt-course'); if (el) el.innerHTML = h; })
+      .catch(() => { const el = document.getElementById('rt-course'); if (el && last === snap) el.innerHTML = ''; });
   }
 
   // ---- GPX の書き出し ----
