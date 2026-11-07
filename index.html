@@ -142,6 +142,7 @@
   <div class="rt-hits" id="rt-hits-goal" hidden></div>
   <button id="rt-run" disabled>案内</button>
   <button id="rt-gpx" disabled style="width:100%;margin-top:4px;padding:6px;font-size:13px">GPXで保存（スマホ・GPS機器用）</button>
+  <label style="display:block;margin-top:6px;font-size:13px"><input type="checkbox" id="rt-anim"> 経路をアニメーションで表示（出発地から目的地へたどる）</label>
   <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
   <div id="rt-msg" style="margin-top:4px"></div>
   <button id="rt-pdf" hidden style="width:100%;margin-top:8px;padding:6px;font-size:13px">ルート案内をPDFで保存…</button>
@@ -618,6 +619,8 @@ map.on('load', () => {
   $('rt-swap').onclick = () => Route.swap();
   $('rt-clear').onclick = () => Route.clear();
   $('rt-run').onclick = () => Route.run();
+  $('rt-anim').onchange = e => Route.animate(e.target.checked);
+  Route.animate($('rt-anim').checked);
   $('rt-pdf').onclick = () => RouteReport.open();
   $('rt-gpx').onclick = async () => {
     const t = await Route.gpx(); if (!t) return;

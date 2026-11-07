@@ -45,6 +45,7 @@ const RouteReport = (() => {
   async function capture(r) {
     const prev = { c: map.getCenter(), z: map.getZoom() };
     const t3 = T3D.suspend();
+    Route.pauseAnim(true);  // 撮影中はアニメーションを止め、経路全体を表示する
     const hidden = HIDE.filter(visible);
     hidden.forEach(id => map.setLayoutProperty(id, 'visibility', 'none'));
     document.querySelectorAll('.maplibregl-popup').forEach(x => x.remove());
@@ -71,6 +72,7 @@ const RouteReport = (() => {
       img = o.toDataURL('image/jpeg', 0.88);
     } catch (e) { img = ''; }
     hidden.forEach(id => map.setLayoutProperty(id, 'visibility', 'visible'));
+    Route.pauseAnim(false);
     T3D.resume(t3);
     map.jumpTo({ center: prev.c, zoom: prev.z });
     return img;
