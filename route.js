@@ -20,8 +20,6 @@ const Route = (() => {
   const tobler = sgrad => 6 * Math.exp(-3.5 * Math.abs(sgrad + 0.05));
   const TOB0 = tobler(0), TOB_MIN = TOB0 / 6;  // 係数の下限（最も速い下り坂）
   const COLOR = { start: '#1565c0', goal: '#c62828' };
-  const ANIM_MS = 8000, ANIM_HOLD_MS = 3000;  // 経路をたどるアニメーション：始点→終点にかける時間、終点で止めておく時間
-  const ANIM_DIM = 0.25;                      // アニメーション中、経路全体（静止表示）を薄くする不透明度
   // 左のサイドバーに隠れないよう、地図を合わせるときの左余白を広げる
   const pad = p => { const el = document.getElementById('rt-panel'), w = el && el.offsetWidth && innerWidth > 600 ? el.offsetWidth + 10 : 0;
     return { top: p, bottom: p, right: p, left: p + w }; };
@@ -29,7 +27,6 @@ const Route = (() => {
   let pickFor = null, routed = false;
   let last = null;               // 直近の経路の結果（PDFレポート用。route_report.js が読む）
   let lastRoute = null;          // 直近の経路の結果（GPX書き出し用）
-  let animOn = false, animPaused = false, animPath = null, animFrame = 0, animT0 = 0;
   const pts = { start: null, goal: null };     // { ll, label }
   const markers = {};
 
@@ -366,7 +363,12 @@ const Route = (() => {
       ? off.samples.slice(1).map((b, k) => { const a = off.samples[k];
           return { kind: Math.max(a.deg, b.deg) >= STEEP_DEG ? 'steep' : 'off', coords: [a.ll, b.ll], sec: off.sec / (off.samples.length - 1) }; })
       : [{ kind: 'off', coords: [goalNode, goal], sec: off.sec }];
-    setAnimPath([{ kind: 'off', coords: [start, startNode], sec: 0 }, ...chain, ...offPieces]);
+    const goalElev = Slope.elevAt(goal), escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    RouteAnim.setPath([{ kind: 'off', coords: [start, startNode], sec: 0 }, ...chain, ...offPieces], [
+      { ll: start, html: escH(pts.start.label), cls: 'start' },
+      { ll: parkC, html: '駐車地点', cls: 'park' },
+      { ll: goal, html: escH(pts.goal.label) + (isNaN(goalElev) ? '' : `<small>標高 ${Math.round(goalElev)}m</small>`), cls: 'goal' },
+    ]);
     map.getSource('rt-pt').setData(fc(parkC ? [pt(parkC, 'park', 'P')] : []));
     routed = true;
     const all = [start, goal, ...lines[CAR].flatMap(l => l.coords), ...lines[FOOT].flatMap(l => l.coords)];
@@ -455,7 +457,7 @@ const Route = (() => {
   // ---- 出発地・目的地 ----
   const empty = () => ({ type: 'FeatureCollection', features: [] });
   function clearRoute() {
-    routed = false; last = null; lastRoute = null; setAnimPath(null);
+    routed = false; last = null; lastRoute = null; RouteAnim.setPath(null);
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
@@ -527,82 +529,18 @@ const Route = (() => {
     map.addLayer({ id: 'rt-path-casing', type: 'line', source: 'rt-path', filter: ['in', ['get', 'kind'], ['literal', ['car', 'foot']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8 } });
     map.addLayer({ id: 'rt-path-car', type: 'line', source: 'rt-path', filter: ['==', ['get', 'kind'], 'car'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1565c0', 'line-width': 5 } });
     map.addLayer({ id: 'rt-path-foot', type: 'line', source: 'rt-path', filter: ['==', ['get', 'kind'], 'foot'], layout: { 'line-join': 'round' }, paint: { 'line-color': '#2e7d32', 'line-width': 5, 'line-dasharray': [1.2, 0.8] } });
-    // アニメーション（経路を始点から伸ばしていく線と、先頭の点）
-    map.addSource('rt-anim', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    const ak = k => ['==', ['get', 'kind'], k];
-    map.addLayer({ id: 'rt-anim-off', type: 'line', source: 'rt-anim', filter: ak('off'), paint: { 'line-color': '#424242', 'line-width': 3, 'line-dasharray': [1, 1.5] } });
-    map.addLayer({ id: 'rt-anim-steep', type: 'line', source: 'rt-anim', filter: ak('steep'), layout: { 'line-cap': 'round' }, paint: { 'line-color': '#d32f2f', 'line-width': 6 } });
-    map.addLayer({ id: 'rt-anim-casing', type: 'line', source: 'rt-anim', filter: ['in', ['get', 'kind'], ['literal', ['car', 'foot']]], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 9 } });
-    map.addLayer({ id: 'rt-anim-car', type: 'line', source: 'rt-anim', filter: ak('car'), layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#1565c0', 'line-width': 6 } });
-    map.addLayer({ id: 'rt-anim-foot', type: 'line', source: 'rt-anim', filter: ak('foot'), layout: { 'line-join': 'round' }, paint: { 'line-color': '#2e7d32', 'line-width': 6, 'line-dasharray': [1.2, 0.8] } });
     map.addSource('rt-pt', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'rt-pt', type: 'circle', source: 'rt-pt', paint: { 'circle-radius': 9, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2,
       'circle-color': ['match', ['get', 'kind'], 'start', '#1565c0', 'park', '#ff6f00', '#c62828'] } });
-    map.addLayer({ id: 'rt-anim-head', type: 'circle', source: 'rt-anim', filter: ak('head'), paint: { 'circle-radius': 7, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3,
-      'circle-color': ['match', ['get', 'mode'], 'car', '#1565c0', 'foot', '#2e7d32', 'steep', '#d32f2f', 'park', '#ff6f00', '#424242'] } });
+    RouteAnim.init(map, () => pad(80));
   }
 
-  // ---- 経路をたどるアニメーション ----
-  // 道のりを点の列にし、各区間に「所要時間に比例した持ち時間」を割り振る（車で長く走る区間も、歩く区間も、かかる時間の割合で進む）
+  // ---- 経路をたどるアニメーション（route_anim.js）----
   const STATIC = ['rt-path-off', 'rt-path-steep', 'rt-path-casing', 'rt-path-car', 'rt-path-foot'];
-  const ANIM = ['rt-anim-off', 'rt-anim-steep', 'rt-anim-casing', 'rt-anim-car', 'rt-anim-foot', 'rt-anim-head'];
-  function setAnimPath(pieces) {
-    if (!pieces) { animPath = null; animUpdate(); return; }
-    const P = [pieces[0].coords[0]], K = [], T = [0];
-    for (const pc of pieces) {
-      const cs = pc.coords, seg = [];
-      for (let i = 1; i < cs.length; i++) seg.push(distM(cs[i - 1], cs[i]));
-      const L = seg.reduce((a, b) => a + b, 0);
-      seg.forEach((d, i) => { P.push(cs[i + 1]); K.push(pc.kind); T.push(T[T.length - 1] + (L > 0 ? pc.sec * d / L : pc.sec / seg.length)); });
-    }
-    animPath = { P, K, T, total: T[T.length - 1] || 1 };
-    animT0 = performance.now();
-    animUpdate();
-  }
-  // 時刻 t（道のりの持ち時間の単位）までの線と、先頭の点を作る
-  function animFeatures(t) {
-    const { P, K, T } = animPath, feats = [];
-    let lo = 0, hi = T.length - 1;
-    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (T[m] <= t) lo = m; else hi = m - 1; }
-    const i = Math.min(lo, P.length - 2);
-    const f = T[i + 1] > T[i] ? Math.min(1, Math.max(0, (t - T[i]) / (T[i + 1] - T[i]))) : 1;
-    const head = [P[i][0] + (P[i + 1][0] - P[i][0]) * f, P[i][1] + (P[i + 1][1] - P[i][1]) * f];
-    let cur = null;
-    for (let j = 0; j <= i; j++) {
-      const end = j < i ? P[j + 1] : head;
-      if (!cur || cur.kind !== K[j]) { cur = { kind: K[j], coords: [P[j]] }; feats.push(cur); }
-      cur.coords.push(end);
-    }
-    const out = feats.filter(c => c.kind !== 'park' && c.coords.length > 1)
-      .map(c => ({ type: 'Feature', properties: { kind: c.kind }, geometry: { type: 'LineString', coordinates: c.coords } }));
-    out.push({ type: 'Feature', properties: { kind: 'head', mode: K[i] }, geometry: { type: 'Point', coordinates: head } });
-    return out;
-  }
-  function animTick(now) {
-    animFrame = 0;
-    if (!animPath) return;
-    const ph = (now - animT0) % (ANIM_MS + ANIM_HOLD_MS);
-    const t = ph < ANIM_MS ? animPath.total * ph / ANIM_MS : animPath.total;
-    map.getSource('rt-anim').setData({ type: 'FeatureCollection', features: animFeatures(t) });
-    animFrame = requestAnimationFrame(animTick);
-  }
-  // 状態（チェックの有無・経路の有無・一時停止）に合わせて、アニメーションを始める／止める
-  function animUpdate() {
-    if (!map || !map.getSource('rt-anim')) return;
-    const run = animOn && !animPaused && !!animPath;
-    STATIC.forEach(l => map.setPaintProperty(l, 'line-opacity', run ? ANIM_DIM : 1));
-    if (run && !animFrame) animFrame = requestAnimationFrame(animTick);
-    if (!run) {
-      if (animFrame) cancelAnimationFrame(animFrame);
-      animFrame = 0;
-      map.getSource('rt-anim').setData({ type: 'FeatureCollection', features: [] });
-    }
-  }
-  const animate = on => { animOn = on; if (on) animT0 = performance.now(); animUpdate(); };
-  // PDF の地図画像を撮る間などに一時停止する（静止表示に戻る）
-  const pauseAnim = p => { animPaused = p; if (!p) animT0 = performance.now(); animUpdate(); };
+  const animate = on => RouteAnim.enable(on);
+  const pauseAnim = p => RouteAnim.pause(p);  // PDF の地図画像を撮る間などに一時停止する
   function setVisible(on) {
-    ['rt-area', ...STATIC, ...ANIM, 'rt-pt'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    ['rt-area', ...STATIC, ...RouteAnim.LAYERS, 'rt-pt'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
     pauseAnim(!on);  // パネルを閉じている間は止める
     Object.values(markers).forEach(mk => mk.getElement().style.display = on ? '' : 'none');
     if (!on) { showNetwork(false); cancelPick(); }
