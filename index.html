@@ -29,6 +29,19 @@
   .rt-sum i { display: inline-block; width: 12px; height: 4px; margin-right: 4px; vertical-align: middle; }
   .rt-go { margin-top: 6px; font-size: 13px; }
   body.welcome-open #rt-panel { display: none !important; }
+  /* 経路アニメーション（route_anim.js）：地名ラベル・先頭の矢印・右下のパネル */
+  .ra-label { font: bold 17px/1.15 sans-serif; color: #fff; white-space: nowrap; pointer-events: none; letter-spacing: .04em;
+    text-shadow: -2px -2px 0 #0d2a6b, 2px -2px 0 #0d2a6b, -2px 2px 0 #0d2a6b, 2px 2px 0 #0d2a6b, 0 -2px 0 #0d2a6b, 0 2px 0 #0d2a6b, -2px 0 0 #0d2a6b, 2px 0 0 #0d2a6b, 0 4px 6px #000a; }
+  .ra-label.goal { text-shadow: -2px -2px 0 #8e0000, 2px -2px 0 #8e0000, -2px 2px 0 #8e0000, 2px 2px 0 #8e0000, 0 -2px 0 #8e0000, 0 2px 0 #8e0000, -2px 0 0 #8e0000, 2px 0 0 #8e0000, 0 4px 6px #000a; }
+  .ra-label.park { font-size: 14px; } .ra-label small { display: block; font-size: 13px; }
+  .ra-arrow { pointer-events: none; filter: drop-shadow(0 1px 2px #0008); }
+  .ra-hud { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%); z-index: 2; min-width: 230px; padding: 6px 12px 8px; pointer-events: none;
+    background: linear-gradient(#fffffff0, #eeeeeef0); border-radius: 6px; box-shadow: 0 2px 8px #0005; font-family: sans-serif; }
+  .ra-row { display: flex; align-items: baseline; gap: 10px; }
+  .ra-badge { color: #fff; font: bold 15px/1.6 sans-serif; padding: 0 10px; border-radius: 4px; border: 2px solid #fff; box-shadow: 0 0 0 1px #0d2a6b; }
+  .ra-dist b { font-size: 28px; font-variant-numeric: tabular-nums; } .ra-dist small { font-size: 14px; font-weight: bold; margin-left: 2px; } .ra-dist i { font-style: normal; font-size: 12px; color: #555; }
+  .ra-bar { height: 6px; margin-top: 4px; background: #ccc; border-radius: 3px; overflow: hidden; } .ra-bar i { display: block; height: 100%; }
+  body.route-open .ra-hud { left: calc(50% + 155px); }
   body.route-open #panel, body.route-open #toggle-panel, body.route-open #res-wrap { display: none !important; }
   #rt-panel { display: none; top: 10px; left: 10px; bottom: 30px; width: 300px; max-width: calc(100% - 52px); overflow: auto; box-sizing: border-box; padding: 12px 14px; box-shadow: 0 1px 6px #0003; }
   body.route-open #rt-panel { display: block; }
@@ -142,6 +155,7 @@
   <div class="rt-hits" id="rt-hits-goal" hidden></div>
   <button id="rt-run" disabled>案内</button>
   <button id="rt-gpx" disabled style="width:100%;margin-top:4px;padding:6px;font-size:13px">GPXで保存（スマホ・GPS機器用）</button>
+  <label style="display:block;margin-top:6px;font-size:13px"><input type="checkbox" id="rt-anim"> 経路をアニメーションで表示</label>
   <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
   <div id="rt-msg" style="margin-top:4px"></div>
   <button id="rt-pdf" hidden style="width:100%;margin-top:8px;padding:6px;font-size:13px">ルート案内をPDFで保存…</button>
@@ -248,6 +262,7 @@
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="slope.js"></script>
+<script src="route_anim.js"></script>
 <script src="route.js"></script>
 <script src="terrain3d.js"></script>
 <script src="route_report.js"></script>
@@ -648,6 +663,8 @@ map.on('load', () => {
   $('rt-swap').onclick = () => Route.swap();
   $('rt-clear').onclick = () => Route.clear();
   $('rt-run').onclick = () => Route.run();
+  $('rt-anim').onchange = e => Route.animate(e.target.checked);
+  Route.animate($('rt-anim').checked);
   $('rt-pdf').onclick = () => RouteReport.open();
   $('rt-pptx').onclick = () => RouteReport.pptx();
   $('rt-gpx').onclick = async () => {

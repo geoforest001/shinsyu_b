@@ -321,10 +321,12 @@ const Route = (() => {
     segs.reverse();
     const lines = { [CAR]: [], [FOOT]: [] }, sum = { [CAR]: [0, 0], [FOOT]: [0, 0] }, trackM = { v: 0 };
     const cls = G.d.classes, walk = [];  // walk: 徒歩区間の座標（断面図用）
+    const chain = [];  // アニメーション用：始点から順に { kind, coords, sec }
     for (const g of segs) {
       const c = g.edge, L = G.E.len[c];
       const sec = g.mode === CAR ? L / (cls[G.E.cls[c]][1] / 3.6) : G.footSec(c, g.from !== G.E.a[c]);
       const pts = edgeCoords(c, g.from), arr = lines[g.mode];
+      chain.push({ kind: g.mode === CAR ? 'car' : 'foot', coords: pts.slice(), sec });  // pts は下で lines 側に書き足されるので複製する
       if (g.mode === FOOT) walk.push(...(walk.length ? pts.slice(1) : pts));
       const last = arr[arr.length - 1];
       if (last && last.end === g.from) last.coords.push(...pts.slice(1));
@@ -355,6 +357,18 @@ const Route = (() => {
       ...steepLines.map(l => line(l.coords, 'steep')),
     ]));
     const parkC = park !== null ? [G.lon[park], G.lat[park]] : null;
+    // アニメーションの道のり：出発地→最寄りの道（直線）→車→駐車（その場で止まる）→徒歩→道なし（急斜面は赤）
+    if (parkC) { const i = chain.findIndex(p => p.kind === 'foot'); chain.splice(i < 0 ? chain.length : i, 0, { kind: 'park', coords: [parkC, parkC], sec: PARK_SEC }); }
+    const offPieces = off.samples.length > 1
+      ? off.samples.slice(1).map((b, k) => { const a = off.samples[k];
+          return { kind: Math.max(a.deg, b.deg) >= STEEP_DEG ? 'steep' : 'off', coords: [a.ll, b.ll], sec: off.sec / (off.samples.length - 1) }; })
+      : [{ kind: 'off', coords: [goalNode, goal], sec: off.sec }];
+    const goalElev = Slope.elevAt(goal), escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    RouteAnim.setPath([{ kind: 'off', coords: [start, startNode], sec: 0 }, ...chain, ...offPieces], [
+      { ll: start, html: escH(pts.start.label), cls: 'start' },
+      { ll: parkC, html: '駐車地点', cls: 'park' },
+      { ll: goal, html: escH(pts.goal.label) + (isNaN(goalElev) ? '' : `<small>標高 ${Math.round(goalElev)}m</small>`), cls: 'goal' },
+    ]);
     map.getSource('rt-pt').setData(fc(parkC ? [pt(parkC, 'park', 'P')] : []));
     routed = true;
     const all = [start, goal, ...lines[CAR].flatMap(l => l.coords), ...lines[FOOT].flatMap(l => l.coords)];
@@ -444,7 +458,7 @@ const Route = (() => {
   // ---- 出発地・目的地 ----
   const empty = () => ({ type: 'FeatureCollection', features: [] });
   function clearRoute() {
-    routed = false; last = null; lastRoute = null;
+    routed = false; last = null; lastRoute = null; RouteAnim.setPath(null);
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
@@ -519,9 +533,16 @@ const Route = (() => {
     map.addSource('rt-pt', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'rt-pt', type: 'circle', source: 'rt-pt', paint: { 'circle-radius': 9, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2,
       'circle-color': ['match', ['get', 'kind'], 'start', '#1565c0', 'park', '#ff6f00', '#c62828'] } });
+    RouteAnim.init(map, () => pad(80));
   }
+
+  // ---- 経路をたどるアニメーション（route_anim.js）----
+  const STATIC = ['rt-path-off', 'rt-path-steep', 'rt-path-casing', 'rt-path-car', 'rt-path-foot'];
+  const animate = on => RouteAnim.enable(on);
+  const pauseAnim = p => RouteAnim.pause(p);  // PDF の地図画像を撮る間などに一時停止する
   function setVisible(on) {
-    ['rt-area', 'rt-path-off', 'rt-path-steep', 'rt-path-casing', 'rt-path-car', 'rt-path-foot', 'rt-pt'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    ['rt-area', ...STATIC, ...RouteAnim.LAYERS, 'rt-pt'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    pauseAnim(!on);  // パネルを閉じている間は止める
     Object.values(markers).forEach(mk => mk.getElement().style.display = on ? '' : 'none');
     if (!on) { showNetwork(false); cancelPick(); }
   }
@@ -536,5 +557,5 @@ const Route = (() => {
   const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
   const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
   return { init, setVisible, gpx, hasRoute: () => !!lastRoute, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
-    has: w => !!pts[w], result: () => last, AREA_NAME };
+    animate, pauseAnim, has: w => !!pts[w], result: () => last, AREA_NAME };
 })();
