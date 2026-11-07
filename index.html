@@ -10,7 +10,7 @@
   .box { position: absolute; z-index: 1; background: #fffe; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 sans-serif; }
   #panel { top: 10px; left: 10px; max-width: 270px; max-height: calc(100% - 60px); overflow: auto; }
   #legend { bottom: 28px; left: 10px; }
-  #legend i { display: inline-block; width: 18px; height: 12px; margin-right: 6px; vertical-align: middle; }
+  #legend i, #legend2 i { display: inline-block; width: 18px; height: 12px; margin-right: 6px; vertical-align: middle; }
   .sec { border-top: 1px solid #ccc; margin-top: 6px; padding-top: 6px; }
   select { font-size: 13px; }
   small { color: #555; }
@@ -58,6 +58,12 @@
   </div>
 
   <div class="sec">
+    <label><input type="checkbox" id="slope-on"> <b>傾斜区分図</b></label><br>
+    <small>国土地理院DEM10mから作成。</small><br>
+    透明度：<input type="range" id="slope-op" min="20" max="100" value="65" style="width:60%">
+  </div>
+
+  <div class="sec">
     <label><input type="checkbox" id="ov-on"> <b>重なりを抽出</b></label><br>
     <small>下の条件を両方満たす5kmメッシュを強調します。</small><br>
     危惧種の記録数 ≧ <b id="ov-r-v">3</b><br>
@@ -72,6 +78,15 @@
   </div>
 </div>
 <div id="legend" class="box"></div>
+<div id="legend2" class="box" style="display:none;bottom:28px;left:170px"><b>傾斜区分（度）</b>
+  <div><i style="background:#f7fcb9"></i>0–3（平坦）</div>
+  <div><i style="background:#d9f0a3"></i>3–8</div>
+  <div><i style="background:#addd8e"></i>8–15</div>
+  <div><i style="background:#78c679"></i>15–20</div>
+  <div><i style="background:#fdae61"></i>20–30</div>
+  <div><i style="background:#f46d43"></i>30–40</div>
+  <div><i style="background:#a50026"></i>40以上（急傾斜）</div>
+</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
@@ -106,14 +121,18 @@ const addGen = () => {
   if (map.getSource('gen')) map.removeSource('gen');
   map.addSource('gen', { type: 'raster', tileSize: 512, tiles: [tiles()], bounds: [137.3, 35.2, 138.8, 37.1] });
   map.addLayer({ id: 'gen', type: 'raster', source: 'gen', paint: { 'raster-opacity': 0.75 },
-    layout: { visibility: $('gen-on').checked ? 'visible' : 'none' } }, 'mesh');
+    layout: { visibility: $('gen-on').checked ? 'visible' : 'none' } }, 'slope');
 };
 
 map.on('load', () => {
+  map.addSource('slope', { type: 'raster', tileSize: 256, minzoom: 7, maxzoom: 13,
+    tiles: [new URL('data/slope_tiles/{z}/{x}/{y}.png', location.href).href.replace(/%7B/g, '{').replace(/%7D/g, '}')],
+    attribution: '傾斜: 国土地理院DEM10m' });
+  map.addLayer({ id: 'slope', type: 'raster', source: 'slope', paint: { 'raster-opacity': 0.65 }, layout: { visibility: 'none' } });
   map.addSource('mesh', { type: 'geojson', data: 'data/grid_nagano.geojson' });
   map.addLayer({ id: 'mesh', type: 'fill', source: 'mesh',
     filter: ['>', ['get', 'n'], 0],
-    paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.8, 'fill-outline-color': '#ffffff99' },
+    paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.55, 'fill-outline-color': '#ffffff99' },
     layout: { visibility: $('rare-on').checked ? 'visible' : 'none' } });
   map.addSource('mask', { type: 'geojson', data: 'data/nagano_mask.geojson' });
   const ovf = () => ['all', ['>=', ['get', 'n'], +$('ov-r').value], ['>=', ['get', 'gen'], +$('ov-g').value]];
@@ -132,6 +151,11 @@ map.on('load', () => {
     $('legend').style.display = e.target.checked ? 'block' : 'none';
   };
   $('taxon').onchange = addGen;
+  $('slope-on').onchange = e => {
+    map.setLayoutProperty('slope', 'visibility', e.target.checked ? 'visible' : 'none');
+    $('legend2').style.display = e.target.checked ? 'block' : 'none';
+  };
+  $('slope-op').oninput = e => map.setPaintProperty('slope', 'raster-opacity', e.target.value / 100);
 
   // --- 重なり抽出 ---
   let grid = null;
