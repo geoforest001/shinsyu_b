@@ -8,8 +8,11 @@
 <style>
   html, body, #map { margin: 0; height: 100%; }
   .box { position: absolute; z-index: 1; background: #fffe; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 sans-serif; }
-  #panel { top: 10px; left: 10px; max-width: 270px; max-height: calc(100% - 60px); overflow: auto; }
+  #panel { top: 10px; left: 10px; max-width: 270px; max-height: calc(100% - 100px); overflow: auto; }
   #legend { bottom: 40px; right: 10px; }
+  body.welcome-open #panel, body.welcome-open #toggle-panel, body.welcome-open #legend, body.welcome-open #legend2, body.welcome-open #res-wrap { display: none !important; }
+  body.hide-panel #panel { display: none !important; }
+  #toggle-panel { position: absolute; z-index: 2; left: 10px; bottom: 28px; font-size: 12px; padding: 4px 8px; }
   #results table { border-collapse: collapse; width: 100%; font-size: 12px; }
   #results th { position: sticky; top: 0; background: #eee; font-weight: normal; padding: 2px 4px; text-align: right; }
   #results td { padding: 2px 4px; text-align: right; border-top: 1px solid #eee; }
@@ -24,6 +27,7 @@
 </head>
 <body>
 <div id="map"></div>
+<button id="toggle-panel">パネルを隠す</button>
 <div id="panel" class="box">
   <b>長野県 動植物 分布マップ</b> <button id="open-welcome" style="float:right;font-size:12px">最初のメニュー</button>
 
@@ -368,8 +372,15 @@ map.on('load', () => {
     free:     () => {},
   };
   $('welcome').querySelectorAll('button.opt').forEach(b => b.onclick = () => { $('welcome').close(); GO[b.dataset.go](); });
-  $('open-welcome').onclick = () => $('welcome').showModal();
-  $('welcome').showModal();
+  const wopen = on => document.body.classList.toggle('welcome-open', on);
+  $('welcome').addEventListener('close', () => wopen(false));
+  const showWelcome = () => { wopen(true); $('welcome').showModal(); };
+  $('open-welcome').onclick = showWelcome;
+  $('toggle-panel').onclick = () => {
+    const h = document.body.classList.toggle('hide-panel');
+    $('toggle-panel').textContent = h ? 'パネルを表示' : 'パネルを隠す';
+  };
+  showWelcome();
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
     legend(e.target.value);
