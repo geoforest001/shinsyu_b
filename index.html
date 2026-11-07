@@ -32,6 +32,15 @@
   <b>長野県 動植物 分布マップ</b> <button id="open-welcome" style="float:right;font-size:12px">最初のメニュー</button>
 
   <div class="sec">
+    背景：
+    <select id="base">
+      <option value="gsi">地理院 淡色地図</option>
+      <option value="white">白地図（背景なし）</option>
+    </select><br>
+    <small>白地図では県の輪郭と抽出結果だけを表示します。</small>
+  </div>
+
+  <div class="sec" style="border-top:0;margin-top:0;padding-top:0">
     <label><input type="checkbox" id="gen-on" checked> <b>一般分布</b>（全記録の密度）</label><br>
     分類群：
     <select id="taxon">
@@ -108,6 +117,7 @@
   <button class="opt" data-go="surveyed">調査が進み危惧種も多い場所<small>一般記録3000件以上かつ危惧種10件以上</small></button>
   <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
   <button class="opt" data-go="report">PDFレポートを作る<small>条件を選んで印刷用レポートを出力</small></button>
+  <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
 </dialog>
 <dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
@@ -131,7 +141,8 @@
   <div style="margin-top:6px">含める内容：<br>
     <label><input type="checkbox" id="inc-map" checked> 地図</label>
     <label><input type="checkbox" id="inc-city" checked> 市町村別集計</label>
-    <label><input type="checkbox" id="inc-list" checked> メッシュ一覧</label>
+    <label><input type="checkbox" id="inc-list" checked> メッシュ一覧</label><br>
+    <label><input type="checkbox" id="inc-white"> 地図を白地図で出力</label>
   </div>
   <div style="margin-top:10px"><button id="make">レポートを開く</button> <button id="close-dlg">閉じる</button></div>
   <small>開いたレポートの印刷ダイアログで、送信先を「PDFに保存」にしてください。</small>
@@ -181,7 +192,7 @@ const map = new maplibregl.Map({
     sources: { gsi: { type: 'raster', tileSize: 256,
       tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
       attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a> | データ: <a href="https://www.gbif.org">GBIF</a>' } },
-    layers: [{ id: 'gsi', type: 'raster', source: 'gsi' }]
+    layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#ffffff' } }, { id: 'gsi', type: 'raster', source: 'gsi' }]
   },
   center: [138.0, 36.15], zoom: 7.3,
   preserveDrawingBuffer: true
@@ -215,7 +226,18 @@ map.on('load', () => {
     paint: { 'line-color': '#4a148c', 'line-width': 2.5 }, layout: { visibility: 'none' } });
   map.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ff6f00', 'line-width': 4 } });
+  map.addSource('pref', { type: 'geojson', data: 'data/nagano_outline.geojson' });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
+  map.addLayer({ id: 'pref-line', type: 'line', source: 'pref', paint: { 'line-color': '#555', 'line-width': 1.4 } });
+  const setBase = m => {
+    const w = m === 'white';
+    $('base').value = m;
+    map.setLayoutProperty('gsi', 'visibility', w ? 'none' : 'visible');
+    map.setPaintProperty('mask', 'fill-opacity', w ? 1 : 0.82);
+    map.setPaintProperty('mesh', 'fill-opacity', w ? 0.9 : 0.55);
+    map.setPaintProperty('mesh', 'fill-outline-color', w ? '#888888' : '#ffffff99');
+  };
+  $('base').onchange = e => setBase(e.target.value);
   addGen();
   legend($('mode').value);
   $('legend').style.display = $('rare-on').checked ? 'block' : 'none';
@@ -305,7 +327,8 @@ map.on('load', () => {
     const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
     let img = '';
     if ($('inc-map').checked) {
-      const prev = { c: map.getCenter(), z: map.getZoom(), ov: $('ov-on').checked, only: $('only').checked };
+      const prev = { c: map.getCenter(), z: map.getZoom(), ov: $('ov-on').checked, only: $('only').checked, base: $('base').value };
+      if ($('inc-white').checked) setBase('white');
       document.querySelectorAll('.maplibregl-popup').forEach(x => x.remove());
       map.getSource('sel').setData({ type: 'FeatureCollection', features: [] });
       showOv(true);
@@ -321,6 +344,7 @@ map.on('load', () => {
         o.getContext('2d').drawImage(cv, x, y, cw, ch, 0, 0, cw, ch);
         img = o.toDataURL('image/jpeg', 0.85);
       } catch (e) { img = ''; }
+      setBase(prev.base);
       showOv(prev.ov); map.jumpTo({ center: prev.c, zoom: prev.z });
     }
     const byCity = {};
@@ -369,6 +393,7 @@ map.on('load', () => {
     surveyed: () => { setCheck('gen-on', false); setCheck('slope-on', false); usePreset('surveyed'); setCheck('only', true); setCheck('ov-on', true); },
     general:  () => { setCheck('rare-on', false); setCheck('slope-on', false); setCheck('ov-on', false); setCheck('gen-on', true); },
     report:   () => { $('open-report').click(); },
+    white:    () => { setBase('white'); setCheck('gen-on', false); setCheck('slope-on', false); usePreset('many'); setCheck('only', true); setCheck('ov-on', true); },
     free:     () => {},
   };
   $('welcome').querySelectorAll('button.opt').forEach(b => b.onclick = () => { $('welcome').close(); GO[b.dataset.go](); });

@@ -2,6 +2,7 @@
 長野県 動植物 分布マップ（GitHub Pages）
 
 - `index.html` : 地図ページ（一般分布レイヤ＋絶滅危惧種レイヤを1枚に重ねて表示、個別にオン/オフ）
+- `data/nagano_outline.geojson` : 白地図用の県境線
 - `data/nagano_mask.geojson` : 県外を薄く表示するためのマスク（境界: dataofjapan/land）
 - `data/slope_tiles/` : 傾斜区分図のXYZタイル(z7-13)。国土地理院DEM10mの傾斜角を長野県で切り抜き、0-3/3-8/8-15/15-20/20-30/30-40/40°以上に区分
 - `data/grid_nagano.geojson` : 県内545セルの約5km(0.05°)メッシュ（危惧種の記録数・種数・カテゴリ別、一般記録数、平均傾斜・急傾斜率(30°以上)・緩傾斜率(8°未満)、市町村名）
