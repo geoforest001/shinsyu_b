@@ -2,10 +2,11 @@
 """OpenStreetMap の道路データから、ブラウザで経路探索するための軽量グラフを作る。
 
 使い方:
-    python3 tools/build_route_graph.py                 # Overpass API から取得して作成
-    python3 tools/build_route_graph.py --input ways.json  # 取得済みの Overpass JSON から作成
+    python3 tools/build_route_graph.py                       # 諏訪湖周辺を Overpass API から取得して作成
+    python3 tools/build_route_graph.py --area ina            # 伊那IC周辺で作成
+    python3 tools/build_route_graph.py --input ways.json     # 取得済みの Overpass JSON から作成
 
-出力: data/route/ina_graph.json
+出力: data/route/<area>_graph.json（AREAS を参照）
 
 出力形式（GeoJSON より小さくするための独自形式）:
     origin : [経度, 緯度]  座標の基準点
@@ -25,8 +26,12 @@ import time
 import urllib.parse
 import urllib.request
 
-BBOX = (35.75, 137.80, 35.95, 138.10)  # 南, 西, 北, 東（伊那IC周辺）
-OUT = os.path.join(os.path.dirname(__file__), '..', 'data', 'route', 'ina_graph.json')
+# 対象範囲: 名前と (南, 西, 北, 東)
+AREAS = {
+    'suwa': ('諏訪湖周辺', (35.93, 137.95, 36.17, 138.27)),
+    'ina': ('伊那IC周辺', (35.75, 137.80, 35.95, 138.10)),
+}
+OUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'route')
 SCALE = 1e5
 SIMPLIFY_M = 4.0  # 中間点の間引き許容誤差（m）
 
@@ -183,7 +188,7 @@ def build(osm):
     return [coords[i] for i in keep], [[remap[e[0]], remap[e[1]], *e[2:]] for e in edges]
 
 
-def encode(nodes, edges, stamp):
+def encode(nodes, edges, stamp, name, bbox):
     ox = math.floor(min(p[0] for p in nodes) * 100) / 100
     oy = math.floor(min(p[1] for p in nodes) * 100) / 100
     q = lambda p: (round((p[0] - ox) * SCALE), round((p[1] - oy) * SCALE))
@@ -202,8 +207,8 @@ def encode(nodes, edges, stamp):
             px, py = x, y
     return {
         'v': 1,
-        'name': '伊那IC周辺',
-        'bbox': [BBOX[1], BBOX[0], BBOX[3], BBOX[2]],
+        'name': name,
+        'bbox': [bbox[1], bbox[0], bbox[3], bbox[2]],
         'source': f'© OpenStreetMap contributors (ODbL) / {stamp}',
         'origin': [ox, oy], 'scale': SCALE,
         'classes': [[c[1], c[2], c[3]] for c in CLASSES],
@@ -213,16 +218,18 @@ def encode(nodes, edges, stamp):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--area', default='suwa', choices=AREAS, help='対象範囲（既定: suwa）')
     ap.add_argument('--input', help='取得済みの Overpass JSON')
     ap.add_argument('--geojson', help='比較用に同じ内容の GeoJSON も書き出す')
     args = ap.parse_args()
-    osm = json.load(open(args.input)) if args.input else fetch(BBOX)
+    name, bbox = AREAS[args.area]
+    osm = json.load(open(args.input)) if args.input else fetch(bbox)
     stamp = osm.get('osm3s', {}).get('timestamp_osm_base', '')[:10]
     nodes, edges = build(osm)
-    out = os.path.normpath(OUT)
+    out = os.path.normpath(os.path.join(OUT_DIR, f'{args.area}_graph.json'))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as f:
-        json.dump(encode(nodes, edges, stamp), f, separators=(',', ':'), ensure_ascii=False)
+        json.dump(encode(nodes, edges, stamp, name, bbox), f, separators=(',', ':'), ensure_ascii=False)
     print(f'{out}: {os.path.getsize(out) / 1e6:.2f} MB', file=sys.stderr)
     if args.geojson:
         fc = {'type': 'FeatureCollection', 'features': [

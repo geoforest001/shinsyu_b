@@ -1,16 +1,24 @@
-// 調査ルート案内（試作：伊那IC周辺）
+// 調査ルート案内（試作：諏訪湖周辺）
 // 出発地から「車で行ける所まで車 → 駐車 → 徒歩 → 道のない区間は直線」で目的地への経路を探す。
-// グラフは tools/build_route_graph.py が作る data/route/ina_graph.json。
+// グラフは tools/build_route_graph.py が作る data/route/suwa_graph.json。
+// 画面は左のサイドバーで出発地と目的地を決め、「案内」を押すと経路を描く。
 const Route = (() => {
-  const URL_GRAPH = 'data/route/ina_graph.json';
+  const URL_GRAPH = 'data/route/suwa_graph.json';
+  const AREA = [137.95, 35.93, 138.27, 36.17];  // 西, 南, 東, 北（グラフの bbox と同じ）
+  const AREA_NAME = '諏訪湖周辺';
   const PARK_SEC = 120;          // 駐車・身支度の時間（車→徒歩の乗り換えコスト）
   const OFFROAD_KMH = 1.0;       // 道のない区間（藪こぎ・沢沿い）の歩行速度の目安
   const SNAP_MAX_M = 3000;       // 出発地を道路に吸着させる最大距離
   const GOAL_SEARCH_M = 2500;    // 目的地の周りで「道の端」を探す範囲
-  const IC = [137.943, 35.8655]; // 伊那IC
   const CAR = 0, FOOT = 1;
-
-  let map, G = null, loading = null, start = null, pickMode = false, onMsg = () => {};
+  const COLOR = { start: '#1565c0', goal: '#c62828' };
+  // 左のサイドバーに隠れないよう、地図を合わせるときの左余白を広げる
+  const pad = p => { const el = document.getElementById('rt-panel'), w = el && el.offsetWidth && innerWidth > 600 ? el.offsetWidth + 10 : 0;
+    return { top: p, bottom: p, right: p, left: p + w }; };
+  let map, G = null, loading = null, onMsg = () => {}, onChange = () => {};
+  let pickFor = null, routed = false;
+  const pts = { start: null, goal: null };     // { ll, label }
+  const markers = {};
 
   // ---- グラフの読み込みと展開 ----
   function decode(d) {
@@ -65,7 +73,7 @@ const Route = (() => {
     const k = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
     return Math.hypot((a[0] - b[0]) * k, a[1] - b[1]) * 111320;
   };
-  const inArea = ll => { const b = G ? G.d.bbox : [137.80, 35.75, 138.10, 35.95];
+  const inArea = ll => { const b = AREA;
     return ll[0] >= b[0] && ll[0] <= b[2] && ll[1] >= b[1] && ll[1] <= b[3]; };
   function nearestCarNode(ll) {
     let best = -1, bd = Infinity;
@@ -105,12 +113,14 @@ const Route = (() => {
   }
 
   // ---- 経路探索 ----
-  async function routeTo(goal) {
-    if (!start) { onMsg('先に出発地を決めてください（現在地を取得、または地図で選ぶ）。'); return; }
+  async function run() {
+    if (!pts.start || !pts.goal) { onMsg('出発地と目的地の両方を決めてください。'); return; }
+    const start = pts.start.ll, goal = pts.goal.ll;
+    if (!inArea(goal)) { onMsg(`目的地が対象範囲（${AREA_NAME}・青い点線の枠）の外です。`); return; }
     onMsg('経路を計算中…');
-    await load();
+    try { await load(); } catch (e) { onMsg(e.message); return; }
     const [s0, sd] = nearestCarNode(start);
-    if (sd > SNAP_MAX_M) { onMsg(`出発地から ${(sd / 1000).toFixed(1)} km 以内に車で通れる道がありません。試作範囲（伊那IC周辺）の中で出発地を選んでください。`); return; }
+    if (sd > SNAP_MAX_M) { onMsg(`出発地から ${(sd / 1000).toFixed(1)} km 以内に車で通れる道がありません。対象範囲（${AREA_NAME}）の中で出発地を選んでください。`); return; }
     const { dist, prev, prevEdge } = dijkstra(s0 * 2 + CAR);
     // 目的地の周りの「歩いて行ける点」から、(そこまでの時間 + 道のない区間の時間) が最小のものを選ぶ
     let best = -1, bc = Infinity, boff = 0;
@@ -156,39 +166,70 @@ const Route = (() => {
       line([goalNode, goal], 'off'),
     ]));
     const parkC = park !== null ? [G.lon[park], G.lat[park]] : null;
-    map.getSource('rt-pt').setData(fc([pt(start, 'start', '出発'), pt(goal, 'goal', '目的地'), ...(parkC ? [pt(parkC, 'park', 'P')] : [])]));
+    map.getSource('rt-pt').setData(fc(parkC ? [pt(parkC, 'park', 'P')] : []));
+    routed = true;
     const all = [start, goal, ...lines[CAR].flatMap(l => l.coords), ...lines[FOOT].flatMap(l => l.coords)];
     const lo = all.map(c => c[0]), la = all.map(c => c[1]);
-    map.fitBounds([[Math.min(...lo), Math.min(...la)], [Math.max(...lo), Math.max(...la)]], { padding: 80, maxZoom: 15, duration: 700 });
+    map.fitBounds([[Math.min(...lo), Math.min(...la)], [Math.max(...lo), Math.max(...la)]], { padding: pad(80), maxZoom: 15, duration: 700 });
     const km = m => (m / 1000).toFixed(1) + ' km', mins = s => s < 3600 ? Math.round(s / 60) + ' 分' : Math.floor(s / 3600) + ' 時間 ' + Math.round(s % 3600 / 60) + ' 分';
     const offS = boff / (OFFROAD_KMH / 3.6);
     onMsg(`<b>経路の目安</b><table class="rt-sum">
       <tr><td><i style="background:#1565c0"></i>車</td><td>${km(sum[CAR][0])}</td><td>${mins(sum[CAR][1])}</td></tr>
       ${trackM.v ? `<tr><td colspan="3"><small>　うち林道・農道 ${km(trackM.v)}</small></td></tr>` : ''}
-      <tr><td><i style="background:#2e7d32"></i>徒歩（道あり）</td><td>${km(sum[FOOT][0])}</td><td>${mins(sum[FOOT][1])}</td></tr>
-      <tr><td><i style="background:#757575"></i>道なし（直線）</td><td>${Math.round(boff)} m</td><td>${mins(offS)}</td></tr>
+      ${sum[FOOT][0] ? `<tr><td><i style="background:#2e7d32"></i>徒歩（道あり）</td><td>${km(sum[FOOT][0])}</td><td>${mins(sum[FOOT][1])}</td></tr>` : ''}
+      ${boff >= 1 ? `<tr><td><i style="background:#757575"></i>道なし（直線）</td><td>${Math.round(boff)} m</td><td>${mins(offS)}</td></tr>` : ''}
       <tr><td><b>合計</b></td><td></td><td><b>${mins(sum[CAR][1] + sum[FOOT][1] + offS + (park !== null ? PARK_SEC : 0))}</b></td></tr></table>
       ${parkC ? `<small>駐車地点（P）：北緯 ${parkC[1].toFixed(5)}° 東経 ${parkC[0].toFixed(5)}°</small><br>` : ''}
       <small>出発地から最寄りの道まで ${Math.round(sd)} m は直線で表示しています。</small><br>
       <small style="color:#b71c1c">林道はゲート閉鎖・通行止め・一般車通行禁止のことがあります。入山前に管理者（市町村・森林管理署など）へ通行可否を確認してください。所要時間は平地の速度による目安で、登りや路面状況は考慮していません。</small>`);
   }
 
-  // ---- 出発地 ----
-  function setStart(ll, label) {
-    start = ll;
-    map.getSource('rt-pt').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { kind: 'start', label: '出発' }, geometry: { type: 'Point', coordinates: ll } }] });
-    map.getSource('rt-path').setData({ type: 'FeatureCollection', features: [] });
-    document.getElementById('rt-start').innerHTML = `出発地：${label}<br><small>北緯 ${ll[1].toFixed(4)}° 東経 ${ll[0].toFixed(4)}°${inArea(ll) ? '' : '（<b style="color:#b71c1c">試作範囲外</b>）'}</small>`;
-    onMsg(inArea(ll) ? '目的地のメッシュ（または範囲内の地点）をクリックし、「ここへの経路」を押してください。'
-      : '出発地が試作範囲（伊那IC周辺）の外です。「伊那ICから」を押すか、範囲内を地図で選んでください。');
+  // ---- 出発地・目的地 ----
+  const empty = () => ({ type: 'FeatureCollection', features: [] });
+  function clearRoute() {
+    routed = false;
+    map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
+  }
+  function setPoint(which, ll, label) {
+    pts[which] = { ll, label };
+    if (!markers[which]) {
+      const m = new maplibregl.Marker({ color: COLOR[which], draggable: true }).setLngLat(ll).addTo(map);
+      m.on('dragend', () => { const p = m.getLngLat(); setPoint(which, [p.lng, p.lat], '地図上の地点'); });
+      markers[which] = m;
+    } else markers[which].setLngLat(ll).addTo(map);
+    onChange(which, pts[which], inArea(ll));
+    if (routed) run();             // 案内中にピンを動かしたら引き直す
+    else clearRoute(), onMsg(pts.start && pts.goal ? '「案内」を押すと経路を表示します。' : pts.start ? '目的地を決めてください。' : '出発地を決めてください。');
+  }
+  function clear() {
+    ['start', 'goal'].forEach(w => { pts[w] = null; if (markers[w]) markers[w].remove(); onChange(w, null, true); });
+    clearRoute(); onMsg('出発地を決めてください。');
+  }
+  function swap() {
+    const s0 = pts.start, g0 = pts.goal;
+    pts.start = pts.goal = null;
+    ['start', 'goal'].forEach(w => { if (markers[w]) markers[w].remove(); onChange(w, null, true); });
+    const r = routed; routed = false;
+    if (g0) setPoint('start', g0.ll, g0.label);
+    if (s0) setPoint('goal', s0.ll, s0.label);
+    if (r && s0 && g0) run();
   }
   function locate() {
     if (!navigator.geolocation) { onMsg('このブラウザでは現在地を取得できません。'); return; }
     onMsg('現在地を取得中…');
     navigator.geolocation.getCurrentPosition(
-      p => setStart([p.coords.longitude, p.coords.latitude], `現在地（精度 約${Math.round(p.coords.accuracy)} m）`),
-      e => onMsg('現在地を取得できませんでした（' + e.message + '）。「伊那ICから」か「地図で選ぶ」を使ってください。'),
+      p => setPoint('start', [p.coords.longitude, p.coords.latitude], `現在地（精度 約${Math.round(p.coords.accuracy)} m）`),
+      e => onMsg('現在地を取得できませんでした（' + e.message + '）。地名で探すか「地図で選ぶ」を使ってください。'),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }
+  // 地名・住所の検索（国土地理院の地名検索API）。「緯度,経度」の入力も受け付ける
+  async function search(text) {
+    const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*[,、 ]\s*(-?\d+(?:\.\d+)?)$/);
+    if (m) { let a = +m[1], b = +m[2]; if (a > 90) [a, b] = [b, a]; return [{ ll: [b, a], label: `北緯 ${a}° 東経 ${b}°` }]; }
+    const r = await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(text.trim()));
+    if (!r.ok) throw new Error('地名を検索できませんでした');
+    const near = ll => ll[0] > AREA[0] - 0.1 && ll[0] < AREA[2] + 0.1 && ll[1] > AREA[1] - 0.1 && ll[1] < AREA[3] + 0.1;
+    return (await r.json()).map(f => ({ ll: f.geometry.coordinates, label: f.properties.title })).filter(f => near(f.ll)).slice(0, 8);
   }
 
   // ---- 地図レイヤ ----
@@ -207,9 +248,9 @@ const Route = (() => {
     }
     ['rt-net', 'rt-net-foot'].forEach(l => map.setLayoutProperty(l, 'visibility', 'visible'));
   }
-  function init(m, msg) {
-    map = m; onMsg = msg;
-    const b = [137.80, 35.75, 138.10, 35.95];
+  function init(m, msg, change) {
+    map = m; onMsg = msg; onChange = change;
+    const b = AREA;
     map.addSource('rt-area', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } } });
     map.addLayer({ id: 'rt-area', type: 'line', source: 'rt-area', paint: { 'line-color': '#1565c0', 'line-width': 1.5, 'line-dasharray': [4, 2] }, layout: { visibility: 'none' } });
     map.addSource('rt-path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -223,16 +264,19 @@ const Route = (() => {
   }
   function setVisible(on) {
     ['rt-area', 'rt-path-off', 'rt-path-casing', 'rt-path-car', 'rt-path-foot', 'rt-pt'].forEach(l => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
-    if (!on) showNetwork(false);
+    Object.values(markers).forEach(mk => mk.getElement().style.display = on ? '' : 'none');
+    if (!on) { showNetwork(false); cancelPick(); }
   }
-  // 地図クリックを横取りする（出発地を選ぶモード）。横取りしたら true
+  // 地図クリックを横取りする（地点を選ぶモード）。横取りしたら true
   function handleClick(ll) {
-    if (!pickMode) return false;
-    pickMode = false; map.getCanvas().style.cursor = '';
-    setStart(ll, '地図で選んだ地点');
+    if (!pickFor) return false;
+    const w = pickFor; cancelPick();
+    setPoint(w, ll, '地図で選んだ地点');
     return true;
   }
-  const pick = () => { pickMode = true; map.getCanvas().style.cursor = 'crosshair'; onMsg('地図をクリックして出発地を選んでください。'); };
-  const zoomArea = () => map.fitBounds([[137.80, 35.75], [138.10, 35.95]], { padding: 40, duration: 700 });
-  return { init, setVisible, showNetwork, routeTo, locate, pick, handleClick, zoomArea, inArea, startIC: () => setStart(IC, '伊那IC'), hasStart: () => !!start };
+  function cancelPick() { pickFor = null; if (map) map.getCanvas().style.cursor = ''; }
+  const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
+  const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
+  return { init, setVisible, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
+    has: w => !!pts[w], AREA_NAME };
 })();

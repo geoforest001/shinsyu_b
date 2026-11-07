@@ -6,7 +6,7 @@
 - `data/nagano_mask.geojson` : 県外を薄く表示するためのマスク（境界: dataofjapan/land）
 - `data/slope_tiles/` : 傾斜区分図のXYZタイル(z7-13)。国土地理院DEM10mの傾斜角を長野県で切り抜き、0-3/3-8/8-15/15-20/20-30/30-40/40°以上に区分
 - `route.js` : 調査ルート案内（試作）。ブラウザ内で経路探索（車→駐車→徒歩→道なし区間）
-- `data/route/ina_graph.json` : 伊那IC周辺（北緯35.75–35.95°・東経137.80–138.10°）の道路グラフ。`tools/build_route_graph.py` で OpenStreetMap から作成
+- `data/route/suwa_graph.json` : 諏訪湖周辺（北緯35.93–36.17°・東経137.95–138.27°）の道路グラフ。`tools/build_route_graph.py` で OpenStreetMap から作成
 - `data/grid_nagano.geojson` : 県内545セルの約5km(0.05°)メッシュ（危惧種の記録数・種数・カテゴリ別、一般記録数、平均傾斜・急傾斜率(30°以上)・緩傾斜率(8°未満)、市町村名）
 
 ## データ
@@ -17,13 +17,17 @@
 一般分布は GBIF の密度タイル(API)を表示しており、データは同梱していません。
 
 ## 調査ルート案内（試作）
-- 出発地（現在地／地図で選択／伊那IC）から、メッシュや地点をクリックして「ここへの経路を調べる」を押すと、車で行ける所まで車、そこから徒歩、道のない区間は直線で表示します。
+- パネルの「ルート案内を開く」（または最初のメニュー）で、左にルート案内のサイドバーが開きます。
+- 出発地と目的地を決めて「案内」を押すと、車で行ける所まで車、そこから徒歩、道のない区間は直線で表示します。
+  - 決め方：地名・住所の検索（国土地理院の地名検索API）、「緯度,経度」の入力、現在地（出発地のみ）、地図で選ぶ、メッシュのポップアップの「ここを出発地に／目的地に」
+  - ピンはドラッグで動かせます。案内中に動かすと経路を引き直します。
 - 経路は「車」と「徒歩」の2つの状態を持つダイクストラ法で求めます。駐車地点は自動で決まります。目的地の周り2.5km以内の道から、到着までの時間が最短になる点を選びます。
 - 速度の目安：林道・農道 12km/h（車）、徒歩 4km/h、登山道 2.5km/h、道なし 1km/h。登りや路面状況は考慮していません。
 - 道路データ：© OpenStreetMap contributors（ODbL）。林道は通行止め・ゲート閉鎖のことがあるため、入山前に管理者へ確認が必要です。
 
 ### 道路グラフの作り直し
 ```
-python3 tools/build_route_graph.py   # Overpass API から取得して data/route/ina_graph.json を作成
+python3 tools/build_route_graph.py              # Overpass API から取得して data/route/suwa_graph.json を作成
+python3 tools/build_route_graph.py --area ina   # 伊那IC周辺（data/route/ina_graph.json）
 ```
-GeoJSON ではなく、座標を約1m単位の整数にして差分で並べた独自 JSON にしています。同じ内容の GeoJSON 5.5MB（gzip 0.70MB）に対して 0.97MB（gzip 0.36MB）です。
+GeoJSON ではなく、座標を約1m単位の整数にして差分で並べた独自 JSON にしています。諏訪湖周辺では、同じ内容の GeoJSON 8.65MB（gzip 1.23MB）に対して 1.60MB（gzip 0.60MB）です。

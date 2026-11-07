@@ -23,10 +23,25 @@
   .sec { border-top: 1px solid #ccc; margin-top: 6px; padding-top: 6px; }
   select { font-size: 13px; }
   small { color: #555; }
-  .rt-key { font-size: 11px; } .rt-key span { margin-right: 6px; white-space: nowrap; } .rt-key i { width: 12px !important; height: 3px !important; }
+  .rt-key { font-size: 11px; } .rt-key span { margin-right: 6px; white-space: nowrap; } .rt-key i { display: inline-block; width: 12px; height: 3px; margin-right: 3px; vertical-align: middle; }
   .rt-sum { border-collapse: collapse; font-size: 12px; margin: 2px 0; } .rt-sum td { padding: 1px 4px; } .rt-sum td:nth-child(n+2) { text-align: right; }
   .rt-sum i { display: inline-block; width: 12px; height: 4px; margin-right: 4px; vertical-align: middle; }
   .rt-go { margin-top: 6px; font-size: 13px; }
+  body.welcome-open #rt-panel { display: none !important; }
+  body.route-open #panel, body.route-open #toggle-panel, body.route-open #res-wrap { display: none !important; }
+  #rt-panel { display: none; top: 10px; left: 10px; bottom: 30px; width: 300px; max-width: calc(100% - 52px); overflow: auto; box-sizing: border-box; padding: 12px 14px; box-shadow: 0 1px 6px #0003; }
+  body.route-open #rt-panel { display: block; }
+  #rt-panel h2 { font-size: 15px; margin: 0 0 2px; }
+  .rt-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .rt-row .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #999; }
+  .rt-row input { flex: 1; min-width: 0; font-size: 14px; padding: 5px 6px; border: 1px solid #bbb; border-radius: 4px; }
+  .rt-row input.set { background: #f3f8ff; }
+  .rt-sub { margin: 2px 0 0 18px; font-size: 12px; } .rt-sub button { font-size: 12px; }
+  .rt-hits { margin: 2px 0 0 18px; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+  .rt-hits div { padding: 4px 6px; cursor: pointer; font-size: 13px; border-top: 1px solid #eee; } .rt-hits div:first-child { border-top: 0; }
+  .rt-hits div:hover { background: #eef6ff; }
+  #rt-run { width: 100%; margin-top: 10px; padding: 8px; font-size: 15px; font-weight: bold; color: #fff; background: #1565c0; border: 0; border-radius: 6px; cursor: pointer; }
+  #rt-run:disabled { background: #9fb4cc; cursor: default; }
 </style>
 </head>
 <body>
@@ -98,17 +113,29 @@
     <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
   <div class="sec">
-    <label><input type="checkbox" id="rt-on"> <b>調査ルート案内</b>（試作：伊那IC周辺）</label>
-    <div id="rt-box" style="display:none">
-      <small>車で行ける所（林道の終点など）まで車で行き、そこから歩くルートを探します。青い点線の枠内が対象範囲です。</small><br>
-      <button id="rt-locate">現在地を取得</button> <button id="rt-pick">地図で選ぶ</button> <button id="rt-ic">伊那ICから</button>
-      <div id="rt-start" style="margin-top:4px">出発地：未設定</div>
-      <label><input type="checkbox" id="rt-net" checked> 道路・林道を表示</label>
-      <div class="rt-key"><span><i style="background:#ef6c00"></i>国道</span><span><i style="background:#f9a825"></i>県道など</span><span><i style="background:#9e9e9e"></i>一般道</span><span><i style="background:#795548"></i>林道・農道</span><span><i style="background:#2e7d32"></i>登山道</span></div>
-      <div class="rt-key"><span><b style="color:#1565c0">●</b>出発</span><span><b style="color:#ff6f00">●</b>駐車</span><span><b style="color:#c62828">●</b>目的地</span></div>
-      <div id="rt-msg" style="margin-top:4px"></div>
-      <small>道路：© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</small>
-    </div>
+    <b>調査ルート案内</b>（試作：諏訪湖周辺）<br>
+    <button id="rt-open">ルート案内を開く</button> <small>出発地と目的地を決めて、車＋徒歩の経路を表示します。</small>
+  </div>
+</div>
+<div id="rt-panel" class="box">
+  <button id="rt-close" style="float:right;font-size:12px">閉じる</button>
+  <h2>調査ルート案内</h2>
+  <small>試作：諏訪湖周辺（青い点線の枠内）。車で行ける所（林道の終点など）まで車で行き、そこから歩く経路を探します。</small>
+  <div class="rt-row"><span class="dot" style="background:#1565c0"></span><input id="rt-in-start" placeholder="出発地（地名・住所、緯度,経度）" autocomplete="off"></div>
+  <div class="rt-sub"><button id="rt-locate">現在地</button> <button data-pick="start">地図で選ぶ</button> <small id="rt-note-start"></small></div>
+  <div class="rt-hits" id="rt-hits-start" hidden></div>
+  <div style="text-align:center;margin:2px 0 -4px"><button id="rt-swap" title="出発地と目的地を入れ替え" style="font-size:12px">⇅ 入れ替え</button></div>
+  <div class="rt-row"><span class="dot" style="background:#c62828"></span><input id="rt-in-goal" placeholder="目的地（地名・住所、緯度,経度）" autocomplete="off"></div>
+  <div class="rt-sub"><button data-pick="goal">地図で選ぶ</button> <small id="rt-note-goal">メッシュをクリックしても選べます</small></div>
+  <div class="rt-hits" id="rt-hits-goal" hidden></div>
+  <button id="rt-run" disabled>案内</button>
+  <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
+  <div id="rt-msg" style="margin-top:4px"></div>
+  <div class="sec">
+    <label><input type="checkbox" id="rt-net"> 対象範囲の道路・林道をすべて表示</label>
+    <div class="rt-key" id="rt-key-net" style="display:none"><span><i style="background:#ef6c00"></i>国道</span><span><i style="background:#f9a825"></i>県道など</span><span><i style="background:#9e9e9e"></i>一般道</span><span><i style="background:#795548"></i>林道・農道</span><span><i style="background:#2e7d32"></i>登山道</span></div>
+    <div class="rt-key"><span><i style="background:#1565c0"></i>車</span><span><i style="background:#2e7d32"></i>徒歩</span><span><i style="background:#757575"></i>道なし（直線）</span><span><b style="color:#ff6f00">●</b>駐車地点</span></div>
+    <small>ピンはドラッグで動かせます。地名検索：国土地理院。道路：© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors</small>
   </div>
 </div>
 <div id="res-wrap" class="box" style="display:none;top:10px;right:56px;width:300px">
@@ -135,7 +162,7 @@
   <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
   <button class="opt" data-go="report">PDFレポートを作る<small>条件を選んで印刷用レポートを出力</small></button>
   <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
-  <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>伊那IC周辺。現在地から車＋徒歩の経路を表示</small></button>
+  <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
 </dialog>
 <dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
@@ -248,7 +275,13 @@ map.on('load', () => {
   map.addSource('pref', { type: 'geojson', data: 'data/nagano_outline.geojson' });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   map.addLayer({ id: 'pref-line', type: 'line', source: 'pref', paint: { 'line-color': '#555', 'line-width': 1.4 } });
-  Route.init(map, html => $('rt-msg').innerHTML = html);
+  Route.init(map, html => $('rt-msg').innerHTML = html, (w, p, ok) => {
+    const inp = $('rt-in-' + w);
+    inp.value = p ? p.label : ''; inp.classList.toggle('set', !!p); $('rt-hits-' + w).hidden = true;
+    $('rt-note-' + w).innerHTML = !p ? (w === 'goal' ? 'メッシュをクリックしても選べます' : '')
+      : ok ? `北緯 ${p.ll[1].toFixed(4)}° 東経 ${p.ll[0].toFixed(4)}°` : '<b style="color:#b71c1c">対象範囲の外です</b>';
+    $('rt-run').disabled = !(Route.has('start') && Route.has('goal'));
+  });
   Route.setVisible(false);
   const setBase = m => {
     const w = m === 'white';
@@ -415,7 +448,7 @@ map.on('load', () => {
     general:  () => { setCheck('rare-on', false); setCheck('slope-on', false); setCheck('ov-on', false); setCheck('gen-on', true); },
     report:   () => { $('open-report').click(); },
     white:    () => { setBase('white'); setCheck('gen-on', false); setCheck('slope-on', false); usePreset('many'); setCheck('only', true); setCheck('ov-on', true); },
-    route:    () => { setCheck('gen-on', false); setCheck('ov-on', false); setCheck('rt-on', true); Route.locate(); },
+    route:    () => { setCheck('gen-on', false); setCheck('ov-on', false); openRoute(true); if (!Route.has('start')) Route.locate(); },
     free:     () => {},
   };
   $('welcome').querySelectorAll('button.opt').forEach(b => b.onclick = () => { $('welcome').close(); GO[b.dataset.go](); });
@@ -435,26 +468,43 @@ map.on('load', () => {
   const popupHtml = p =>
       `<b>${p.city}</b><br><b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`;
-  // --- 調査ルート案内 ---
-  $('rt-on').onchange = e => {
-    const on = e.target.checked;
-    $('rt-box').style.display = on ? 'block' : 'none';
+  // --- 調査ルート案内（左のサイドバー）---
+  const openRoute = on => {
+    document.body.classList.toggle('route-open', on);
     Route.setVisible(on);
-    if (on) { $('rt-box').scrollIntoView({ block: 'nearest' }); Route.showNetwork($('rt-net').checked); Route.zoomArea(); if (!Route.hasStart()) $('rt-msg').textContent = '出発地を決めてください。'; }
+    if (on) { Route.showNetwork($('rt-net').checked); Route.zoomArea(); if (!Route.has('start')) $('rt-msg').textContent = '出発地を決めてください。'; }
   };
-  $('rt-net').onchange = e => Route.showNetwork(e.target.checked);
+  $('rt-open').onclick = () => openRoute(true);
+  $('rt-close').onclick = () => openRoute(false);
+  $('rt-net').onchange = e => { Route.showNetwork(e.target.checked); $('rt-key-net').style.display = e.target.checked ? '' : 'none'; };
   $('rt-locate').onclick = () => Route.locate();
-  $('rt-pick').onclick = () => Route.pick();
-  $('rt-ic').onclick = () => Route.startIC();
+  document.querySelectorAll('#rt-panel [data-pick]').forEach(b => b.onclick = () => Route.pick(b.dataset.pick));
+  $('rt-swap').onclick = () => Route.swap();
+  $('rt-clear').onclick = () => Route.clear();
+  $('rt-run').onclick = () => Route.run();
+  ['start', 'goal'].forEach(w => {
+    const inp = $('rt-in-' + w), hits = $('rt-hits-' + w);
+    inp.oninput = () => { inp.classList.remove('set'); hits.hidden = true; };
+    inp.onkeydown = async e => {
+      if (e.key !== 'Enter' || e.isComposing || !inp.value.trim()) return;
+      hits.hidden = false; hits.innerHTML = '<div>検索中…</div>';
+      try {
+        const r = await Route.search(inp.value);
+        if (r.length === 1 && /^北緯/.test(r[0].label)) { Route.setPoint(w, r[0].ll, r[0].label); return; }
+        hits.innerHTML = r.length ? '' : `<div>${Route.AREA_NAME}の近くに該当する地名がありません</div>`;
+        r.forEach(h => { const d = document.createElement('div'); d.textContent = h.label;
+          d.onclick = () => { Route.setPoint(w, h.ll, h.label); map.easeTo({ center: h.ll, zoom: Math.max(map.getZoom(), 12) }); }; hits.append(d); });
+      } catch (err) { hits.innerHTML = `<div>${err.message}</div>`; }
+    };
+  });
   // メッシュのポップアップ（ルート案内中で範囲内なら「ここへの経路」ボタンを付ける）
   const popupNode = (props, ll) => {
     const div = document.createElement('div');
     div.innerHTML = props ? popupHtml(props) : '<b>この地点</b>';
-    if ($('rt-on').checked && Route.inArea([ll.lng, ll.lat])) {
-      const b = document.createElement('button');
-      b.className = 'rt-go'; b.textContent = 'ここへの経路を調べる';
-      b.onclick = () => { pop.remove(); Route.routeTo([ll.lng, ll.lat]); };
-      div.append(document.createElement('br'), b);
+    if (document.body.classList.contains('route-open')) {
+      const btn = (w, t) => { const b = document.createElement('button'); b.className = 'rt-go'; b.textContent = t;
+        b.onclick = () => { pop.remove(); Route.setPoint(w, [ll.lng, ll.lat], props ? `${props.city}のメッシュ` : '地図で選んだ地点'); }; return b; };
+      div.append(document.createElement('br'), btn('start', 'ここを出発地に'), ' ', btn('goal', 'ここを目的地に'));
     }
     const pop = new maplibregl.Popup().setLngLat(ll).setDOMContent(div);
     return pop;
@@ -463,7 +513,7 @@ map.on('load', () => {
     if (Route.handleClick([e.lngLat.lng, e.lngLat.lat])) return;
     const f = map.getLayer('mesh') && map.getLayoutProperty('mesh', 'visibility') !== 'none' ? map.queryRenderedFeatures(e.point, { layers: ['mesh'] })[0] : null;
     if (f) popupNode(f.properties, e.lngLat).addTo(map);
-    else if ($('rt-on').checked && Route.inArea([e.lngLat.lng, e.lngLat.lat])) popupNode(null, e.lngLat).addTo(map);
+    else if (document.body.classList.contains('route-open')) popupNode(null, e.lngLat).addTo(map);
   });
   map.on('mouseenter', 'mesh', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'mesh', () => map.getCanvas().style.cursor = '');
