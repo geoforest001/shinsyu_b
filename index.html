@@ -145,6 +145,7 @@
   <div style="text-align:right"><button id="rt-clear" style="font-size:12px;margin-top:4px">クリア</button></div>
   <div id="rt-msg" style="margin-top:4px"></div>
   <button id="rt-pdf" hidden style="width:100%;margin-top:8px;padding:6px;font-size:13px">ルート案内をPDFで保存…</button>
+  <button id="rt-pptx" hidden style="width:100%;margin-top:4px;padding:6px;font-size:13px">ルート案内をPowerPointで保存…</button>
   <div class="sec">
     <label><input type="checkbox" id="rt-slope"> 傾斜図（歩きやすさ）を重ねる</label><br>
     <label><input type="checkbox" id="rt-net"> 対象範囲の道路・林道をすべて表示</label>
@@ -181,6 +182,7 @@
   <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
 </dialog>
+<div id="busy" style="display:none;position:fixed;z-index:50;left:50%;top:40%;transform:translateX(-50%);background:#222;color:#fff;padding:12px 20px;border-radius:8px;font:14px sans-serif">PowerPoint を作成中…</div>
 <dialog id="spdlg" style="border:1px solid #888;border-radius:8px;padding:14px 16px;font:13px/1.6 sans-serif;width:min(520px,92vw)">
   <b id="sp-title" style="font-size:15px"></b>
   <div style="margin:6px 0">
@@ -210,7 +212,7 @@
   <small>送信には GitHub アカウントが必要です。</small>
 </dialog>
 <dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
-  <b style="font-size:15px">PDFレポート作成</b>
+  <b style="font-size:15px">レポート作成</b>
   <div style="margin-top:8px">条件：
     <select id="preset">
       <option value="cur">現在の絞り込み条件のまま</option>
@@ -231,10 +233,15 @@
     <label><input type="checkbox" id="inc-map" checked> 地図</label>
     <label><input type="checkbox" id="inc-city" checked> 市町村別集計</label>
     <label><input type="checkbox" id="inc-list" checked> メッシュ一覧</label><br>
+    <label><input type="checkbox" id="inc-sp" checked> 危惧種の種別集計・内訳</label>
     <label><input type="checkbox" id="inc-white"> 地図を白地図で出力</label>
   </div>
-  <div style="margin-top:10px"><button id="make">レポートを開く</button> <button id="close-dlg">閉じる</button></div>
-  <small>開いたレポートの印刷ダイアログで、送信先を「PDFに保存」にしてください。</small>
+  <div style="margin-top:6px">出力形式：
+    <label><input type="radio" name="fmt" value="pdf" checked> PDF（印刷）</label>
+    <label><input type="radio" name="fmt" value="pptx"> PowerPoint（.pptx）</label>
+  </div>
+  <div style="margin-top:10px"><button id="make">レポートを作る</button> <button id="close-dlg">閉じる</button></div>
+  <small>PDF：開いたレポートの印刷ダイアログで、送信先を「PDFに保存」にしてください。PowerPoint：ファイルがダウンロードされます。</small>
 </dialog>
 <div id="legend" class="box"></div>
 <div id="legend2" class="box" style="display:none;bottom:40px;right:150px"></div>
@@ -244,6 +251,9 @@
 <script src="route.js"></script>
 <script src="terrain3d.js"></script>
 <script src="route_report.js"></script>
+<script src="https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="mesh_info.js"></script>
+<script src="pptx_report.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const COLORS = ['#ffffb2', '#fecc5c', '#fd8d3c', '#e31a1c'];
@@ -320,7 +330,7 @@ map.on('load', () => {
   map.addSource('pref', { type: 'geojson', data: 'data/nagano_outline.geojson' });
   map.addLayer({ id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.82 } });
   map.addLayer({ id: 'pref-line', type: 'line', source: 'pref', paint: { 'line-color': '#555', 'line-width': 1.4 } });
-  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-pdf').hidden = !Route.result(); $('rt-gpx').disabled = !Route.hasRoute(); }, (w, p, ok) => {
+  Route.init(map, html => { $('rt-msg').innerHTML = html; $('rt-pdf').hidden = !Route.result(); $('rt-pptx').hidden = !Route.result(); $('rt-gpx').disabled = !Route.hasRoute(); }, (w, p, ok) => {
     const inp = $('rt-in-' + w);
     inp.value = p ? p.label : ''; inp.classList.toggle('set', !!p); $('rt-hits-' + w).hidden = true;
     $('rt-note-' + w).innerHTML = !p ? (w === 'goal' ? 'メッシュをクリックしても選べます' : '')
@@ -373,7 +383,7 @@ map.on('load', () => {
 
   // --- 重なり抽出 ---
   let grid = null;
-  fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; updateOv(); });
+  fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; MeshInfo.set({ grid: g }); updateOv(); });
   const hits = () => grid ? grid.features.filter(f => CONDS.every(c => OPS[c.op](f.properties[c.prop], condVal(c)))) : [];
   function updateOv() {
     CONDS.forEach(c => $('v-' + c.id).textContent = condVal(c));
@@ -436,9 +446,16 @@ map.on('load', () => {
   $('close-dlg').onclick = () => $('dlg').close();
   $('preset').onchange = applyPreset;
   $('make').onclick = async () => {
-    const w = window.open('', '_blank');
-    if (!w) { alert('ポップアップがブロックされました。許可してからもう一度お試しください。'); return; }
-    w.document.write('<p style="font:14px sans-serif">レポートを作成中…</p>');
+    const fmt = document.querySelector('input[name=fmt]:checked').value;
+    let w = null;
+    if (fmt === 'pdf') {
+      w = window.open('', '_blank');
+      if (!w) { alert('ポップアップがブロックされました。許可してからもう一度お試しください。'); return; }
+      w.document.write('<p style="font:14px sans-serif">レポートを作成中…</p>');
+    } else {
+      if (typeof PptxGenJS === 'undefined') { alert('PowerPoint の作成に必要な部品を読み込めませんでした。通信状況を確認して、ページを開き直してください。'); return; }
+      $('busy').style.display = 'block';
+    }
     $('dlg').close();
     const k = $('rsort').value;
     const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
@@ -474,6 +491,18 @@ map.on('load', () => {
     const listRows = rows.map(f => { const p = f.properties, c = f.geometry.coordinates[0];
       return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.CR}/${p.EN}/${p.VU}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td><td style="text-align:left;font-size:9.5px">${esc(topNames(p.id, 5))}</td></tr>`; }).join('');
     const d = new Date(), ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    const brk = MeshInfo.breakdown(rows), agg = MeshInfo.agg(rows);
+    if (fmt === 'pptx') {
+      try {
+        await ReportPptx.filter({ ds, rows, img, brk, agg, topNames,
+          conds: CONDS.map(c => { const v = condVal(c), off = c.id in OFF && v === OFF[c.id]; return [c.label, off ? '指定なし' : v + (c.unit || '')]; }),
+          byCity: Object.entries(byCity).sort((a, b) => b[1].n - a[1].n),
+          use: { map: $('inc-map').checked, city: $('inc-city').checked, list: $('inc-list').checked, sp: $('inc-sp').checked } });
+      } catch (e) { alert('PowerPoint の作成に失敗しました：' + e.message); }
+      $('busy').style.display = 'none';
+      return;
+    }
+    const spRows = agg.slice(0, 40).map(x => `<tr><td>${x.ja ? esc(x.ja) + '　' : ''}<i style="color:#555">${esc(x.sci)}</i></td><td style="text-align:center">${x.cat}</td><td>${x.meshes}</td><td>${x.n}</td></tr>`).join('');
     const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>長野県 絶滅危惧種 分布レポート</title><style>
       @page { size: A4; margin: 14mm; }
       body { font: 12px/1.6 'Hiragino Sans','Yu Gothic',sans-serif; color: #111; }
@@ -487,12 +516,13 @@ map.on('load', () => {
     </style></head><body>
     <div class="noprint"><button onclick="print()">印刷 / PDFに保存</button></div>
     <h1>長野県 絶滅危惧種 分布レポート</h1>
-    <small>作成日：${ds} ／ 該当 ${rows.length} メッシュ（5km）／ 危惧種の記録 合計 ${rows.reduce((a, f) => a + f.properties.n, 0)} 件</small>
+    <small>作成日：${ds} ／ 該当 ${rows.length} メッシュ（5km）／ 危惧種の記録 合計 ${brk.n} 件（CR ${brk.CR}・EN ${brk.EN}・VU ${brk.VU}／動物 ${brk.animal}・植物 ${brk.plant}・菌類 ${brk.fungus}）</small>
     <h2>1. 抽出条件</h2>
     <table class="cond"><tr><th>条件</th><th>値</th></tr>${condText()}</table>
     ${img ? `<h2>2. 該当メッシュの分布</h2><img src="${img}"><div class="legend"><small>紫の枠＝条件に合うメッシュ。黄〜赤＝危惧種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。</small></div>` : ''}
     ${$('inc-city').checked ? `<h2>3. 市町村別集計</h2><table><tr><th>市町村</th><th>メッシュ数</th><th>危惧種 記録数</th><th>一般記録数</th><th>平均傾斜</th></tr>${cityRows}</table>` : ''}
     ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>危惧種 記録</th><th>種数</th><th>CR/EN/VU</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th><th>主な危惧種</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
+    ${$('inc-sp').checked && agg.length ? `<h2>5. 危惧種の種別集計${agg.length > 40 ? '（記録数の上位40種）' : ''}</h2><table><thead><tr><th>種名（和名・学名）</th><th>区分</th><th>出現メッシュ数</th><th>記録数</th></tr></thead><tbody>${spRows}</tbody></table><small>全 ${agg.length} 種。区分はGBIFが照合したIUCNの区分です。栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。</small>` : ''}
     <h2>注意事項・出典</h2>
     <small>・危惧種は IUCN レッドリスト CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計。希少種保護のため個別の位置は掲載していません。<br>
     ・記録数は調査の多さを反映します。記録の多い場所が、必ずしも生き物の多い場所とは限りません。<br>
@@ -551,7 +581,7 @@ map.on('load', () => {
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`;
   // --- 種名（危惧種：data/rare_species.json、一般：GBIF から取得）---
   let rareSp = {};
-  fetch('data/rare_species.json').then(r => r.json()).then(d => { rareSp = d; }).catch(() => {});
+  fetch('data/rare_species.json').then(r => r.json()).then(d => { rareSp = d; MeshInfo.set({ rare: d }); }).catch(() => {});
   const topNames = (id, n) => (rareSp[id] || []).slice(0, n).map(x => x[1] || x[0]).join('、');
   const CELL = 0.05, cellPoly = id => { const [a, b] = id.split('_').map(Number), x0 = b * CELL, y0 = a * CELL, x1 = x0 + CELL, y1 = y0 + CELL;
     return `POLYGON((${x0.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y0.toFixed(4)}))`; };
@@ -619,6 +649,7 @@ map.on('load', () => {
   $('rt-clear').onclick = () => Route.clear();
   $('rt-run').onclick = () => Route.run();
   $('rt-pdf').onclick = () => RouteReport.open();
+  $('rt-pptx').onclick = () => RouteReport.pptx();
   $('rt-gpx').onclick = async () => {
     const t = await Route.gpx(); if (!t) return;
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'application/gpx+xml' }));

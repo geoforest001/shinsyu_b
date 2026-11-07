@@ -375,6 +375,7 @@ const Route = (() => {
       off: { m: boff, sec: offS, steepM: off.steepM, maxDeg: off.maxDeg },
       total: sum[CAR][1] + sum[FOOT][1] + offS + parkSec,
       bounds: bboxOf([...all, goalNode]), profile: prof, hasTob: G.hasTob,
+      path: [start, startNode, ...lines[CAR].flatMap(l => l.coords), ...lines[FOOT].flatMap(l => l.coords), ...off.samples.map(q => q.ll), goal],  // 通るメッシュの判定用
       steepDeg: STEEP_DEG, offKmh: OFFROAD_KMH, area: AREA_NAME,
       osm: G.d.source, dem: G.d.dem, at: new Date(),
     };

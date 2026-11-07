@@ -145,9 +145,60 @@ const RouteReport = (() => {
     ];
     if (document.getElementById('base').value !== 'white') items.push('背景地図：国土地理院 地理院タイル（淡色地図）<a href="https://maps.gsi.go.jp/development/ichiran.html">https://maps.gsi.go.jp/development/ichiran.html</a>');
     items.push('地名検索：国土地理院 地名検索API');
-    if (visible('gen')) items.push('生物の出現記録：GBIF（<a href="https://www.gbif.org">https://www.gbif.org</a>）');
+    items.push('危惧種・一般種の出現記録：GBIF（<a href="https://www.gbif.org">https://www.gbif.org</a>）。危惧種の区分は IUCN レッドリスト（CR/EN/VU）');
     items.push('経路と所要時間は本ツールが計算したものです（徒歩の登り下りは Tobler の歩行関数による）。データ提供者は経路の内容に責任を負いません。');
     return items.map(t => `<li>${t}</li>`).join('');
+  }
+
+  // ---- ルート沿い・目的地周辺の危惧種など（MeshInfo：mesh_info.js）----
+  const strip = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
+  async function speciesData(r) {
+    if (!r.path || typeof MeshInfo === 'undefined' || !MeshInfo.ready()) return null;
+    const along = MeshInfo.forPath(r.path), goalId = MeshInfo.idAt(r.goal.ll), goal = MeshInfo.forId(goalId);
+    const general = goal ? await MeshInfo.generalTop(goalId, '', 10) : null;
+    return { along, goal, general };
+  }
+  const spN = x => (x.ja ? `${esc(x.ja)}<br>` : '') + `<i style="color:#555;font-size:10px">${esc(x.sci)}</i>`;
+  function speciesHtml(sp, n) {
+    if (!sp) return '';
+    const near = sp.along.map(m => `<tr><td class="l">${esc(m.city)}</td><td>${m.n}</td><td>${m.sp}</td><td class="l" style="font-size:10px">${esc(m.species.slice(0, 6).map(x => x[1] || x[0]).join('、') || '—')}</td><td>${m.gen}</td></tr>`).join('');
+    let h = `<h2>${n}. ルート沿い・目的地周辺の危惧種など</h2>`;
+    if (sp.along.length) h += `<b>ルートが通る5kmメッシュの危惧種（通る順）</b><table><thead><tr><th>市町村（メッシュ）</th><th>危惧種 記録</th><th>種数</th><th>主な危惧種</th><th>一般記録</th></tr></thead><tbody>${near}</tbody></table>`;
+    if (sp.goal) {
+      h += `<p style="margin:8px 0 2px"><b>目的地のメッシュ（${esc(sp.goal.city)}）</b>　危惧種 記録 ${sp.goal.n}・種数 ${sp.goal.sp}／一般記録 ${sp.goal.gen}</p>`;
+      h += `<table style="width:49%;float:left"><thead><tr><th>危惧種（CR/EN/VU）</th><th>区分</th><th>記録</th></tr></thead><tbody>${sp.goal.species.slice(0, 12).map(x => `<tr><td class="l">${spN({ ja: x[1], sci: x[0] })}</td><td style="text-align:center">${x[3]}</td><td>${x[2]}</td></tr>`).join('') || '<tr><td colspan="3" class="l">該当なし</td></tr>'}</tbody></table>`;
+      h += `<table style="width:49%;float:right"><thead><tr><th>一般（記録の多い上位10種）</th><th>記録</th></tr></thead><tbody>${sp.general && sp.general.length ? sp.general.map(x => `<tr><td class="l">${spN(x)}</td><td>${x.n}</td></tr>`).join('') : '<tr><td colspan="2" class="l">GBIF から取得できませんでした</td></tr>'}</tbody></table><div style="clear:both"></div>`;
+    }
+    return h + '<small>経路が通る約5kmメッシュの集計で、経路上の位置を示すものではありません。記録数は調査の多さを反映します。区分はGBIFが照合したIUCNの区分で、栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。希少種の生育・生息地では、踏み荒らしや採取をしないでください。</small>';
+  }
+  // 行程表をテキストの表にする（PowerPoint 用）
+  function stepData(r) {
+    const rows = []; let t = 0, n = 1;
+    const add = (name, mode, dist, sec, note, count = true) => { if (count) t += sec; rows.push([n++, name, mode, dist, count ? mins(sec) : '—', mins(t), note]); };
+    rows.push(['S', '出発地', '', '', '', '', r.start.label]);
+    if (r.snapM >= 1) add('出発地 → 最寄りの道', '直線表示', km(r.snapM), 0, '所要時間に含めていません', false);
+    add('車で移動', '車', km(r.car.m), r.car.sec, r.car.trackM ? `うち林道・農道 ${km(r.car.trackM)}` : '');
+    if (r.park) add('駐車・身支度', '—', '', r.parkSec, '駐車地点（P）');
+    if (r.foot.m >= 1) add('道を歩く', '徒歩', km(r.foot.m), r.foot.sec, '登山道・林道・小道など');
+    if (r.off.m >= 1) add('道のない区間を歩く', '道なし', km(r.off.m), r.off.sec, r.off.steepM >= 1 ? `${r.steepDeg}°以上の急斜面 ${km(r.off.steepM)}（最大 ${Math.round(r.off.maxDeg)}°）` : '');
+    rows.push(['G', '目的地 到着', '', '', mins(t), '', r.goal.label]);
+    return rows;
+  }
+  async function pptx() {
+    const r = Route.result();
+    if (!r) return;
+    if (typeof PptxGenJS === 'undefined') { alert('PowerPoint の作成に必要な部品を読み込めませんでした。通信状況を確認して、ページを開き直してください。'); return; }
+    const busy = document.getElementById('busy'); busy.style.display = 'block';
+    try {
+      const img = await capture(r), sp = await speciesData(r), nt = notes(r);
+      const d = r.at, ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const cm = r.course ? r.course.match(/<svg[\s\S]*?<\/svg>/) : null, cn = r.course ? r.course.match(/<\/svg><small>([\s\S]*?)<\/small>/) : null;
+      await ReportPptx.route({ ds, r, img, steps: stepData(r), course: cm ? cm[0] : '', courseNote: cn ? strip(cn[1]) : '', species: sp,
+        labels: { start: r.start.label, goal: r.goal.label }, total: mins(r.total),
+        carText: `${km(r.car.m)}・${mins(r.car.sec)}`, footText: r.foot.m >= 1 ? `${km(r.foot.m)}・${mins(r.foot.sec)}` : '—', offText: r.off.m >= 1 ? `${km(r.off.m)}・${mins(r.off.sec)}` : '—',
+        notes: { route: nt.route.map(strip), general: nt.general.map(strip) }, credits: credits(r).match(/<li>[\s\S]*?<\/li>/g).map(strip) });
+    } catch (e) { alert('PowerPoint の作成に失敗しました：' + e.message); }
+    busy.style.display = 'none';
   }
 
   async function open() {
@@ -157,6 +208,7 @@ const RouteReport = (() => {
     if (!w) { alert('ポップアップがブロックされました。許可してからもう一度お試しください。'); return; }
     w.document.write('<p style="font:14px sans-serif">レポートを作成中…</p>');
     const img = await capture(r);
+    const sp = await speciesData(r);
     const d = r.at, ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
     const nt = notes(r);
     const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>調査ルート案内</title><style>
@@ -190,14 +242,15 @@ const RouteReport = (() => {
     <table><tr><th>No</th><th>区間</th><th>手段</th><th>距離</th><th>所要時間</th><th>累計</th><th>備考</th></tr>${steps(r)}</table>
     ${r.course ? `<div class="course">${r.course}</div>` : ''}
     ${r.profile ? `<div class="prof">${r.profile}</div>` : ''}
-    <h2>${img ? 4 : 3}. ルート上の注意事項</h2>
+    ${speciesHtml(sp, img ? 4 : 3)}
+    <h2>${(img ? 4 : 3) + (sp ? 1 : 0)}. ルート上の注意事項</h2>
     ${nt.route.length ? `<b>この経路について</b><ul class="route-notes">${nt.route.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
     <b>入山・調査の前に</b><ul>${nt.general.map(t => `<li>${t}</li>`).join('')}</ul>
-    <h2>${img ? 5 : 4}. クレジット・出典</h2>
+    <h2>${(img ? 5 : 4) + (sp ? 1 : 0)}. クレジット・出典</h2>
     <ul class="credit">${credits(r)}</ul>
     </body></html>`;
     w.document.open(); w.document.write(html); w.document.close();
     setTimeout(() => w.print(), 700);
   }
-  return { open };
+  return { open, pptx };
 })();
