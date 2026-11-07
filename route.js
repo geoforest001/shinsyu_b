@@ -25,6 +25,7 @@ const Route = (() => {
     return { top: p, bottom: p, right: p, left: p + w }; };
   let map, G = null, loading = null, onMsg = () => {}, onChange = () => {};
   let pickFor = null, routed = false;
+  let last = null;               // 直近の経路の結果（PDFレポート用。route_report.js が読む）
   const pts = { start: null, goal: null };     // { ll, label }
   const markers = {};
 
@@ -195,6 +196,7 @@ const Route = (() => {
   async function run() {
     if (!pts.start || !pts.goal) { onMsg('出発地と目的地の両方を決めてください。'); return; }
     const start = pts.start.ll, goal = pts.goal.ll;
+    last = null;
     if (!inArea(goal)) { onMsg(`目的地が対象範囲（${AREA_NAME}・青い点線の枠）の外です。`); return; }
     onMsg('経路を計算中…');
     try { await load(); } catch (e) { onMsg(e.message); return; }
@@ -277,6 +279,17 @@ const Route = (() => {
     const offS = off.sec;
     if (walk.length) await Slope.prefetch(bboxOf(walk)).catch(() => {});
     const prof = profile(walk, off.samples);
+    const parkSec = park !== null ? PARK_SEC : 0;
+    last = {
+      start: { ll: start, label: pts.start.label }, goal: { ll: goal, label: pts.goal.label, elev: Slope.elevAt(goal) },
+      snapM: sd, car: { m: sum[CAR][0], sec: sum[CAR][1], trackM: trackM.v },
+      park: parkC, parkSec, foot: { m: sum[FOOT][0], sec: sum[FOOT][1] },
+      off: { m: boff, sec: offS, steepM: off.steepM, maxDeg: off.maxDeg },
+      total: sum[CAR][1] + sum[FOOT][1] + offS + parkSec,
+      bounds: bboxOf([...all, goalNode]), profile: prof, hasTob: G.hasTob,
+      steepDeg: STEEP_DEG, offKmh: OFFROAD_KMH, area: AREA_NAME,
+      osm: G.d.source, dem: G.d.dem, at: new Date(),
+    };
     onMsg(`<b>経路の目安</b><table class="rt-sum">
       <tr><td><i style="background:#1565c0"></i>車</td><td>${km(sum[CAR][0])}</td><td>${mins(sum[CAR][1])}</td></tr>
       ${trackM.v ? `<tr><td colspan="3"><small>　うち林道・農道 ${km(trackM.v)}</small></td></tr>` : ''}
@@ -299,7 +312,7 @@ const Route = (() => {
   // ---- 出発地・目的地 ----
   const empty = () => ({ type: 'FeatureCollection', features: [] });
   function clearRoute() {
-    routed = false;
+    routed = false; last = null;
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
@@ -391,5 +404,5 @@ const Route = (() => {
   const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
   const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
   return { init, setVisible, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
-    has: w => !!pts[w], AREA_NAME };
+    has: w => !!pts[w], result: () => last, AREA_NAME };
 })();
