@@ -110,6 +110,8 @@
     <div style="margin-top:4px">
       <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button> <button id="open-report">PDFレポート作成…</button>
     </div>
+    <div style="margin-top:6px"><button id="open-feedback">ご要望・お問い合わせ</button>
+    </div>
     <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
   <div class="sec">
@@ -163,7 +165,27 @@
   <button class="opt" data-go="report">PDFレポートを作る<small>条件を選んで印刷用レポートを出力</small></button>
   <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
   <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
+  <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
+</dialog>
+<dialog id="fb" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:360px">
+  <b style="font-size:15px">ご要望・お問い合わせ</b><br>
+  <small>どんなことを求めていますか？（複数選べます）</small>
+  <div id="fb-opts" style="margin-top:6px">
+    <label><input type="checkbox" value="追加してほしい機能"> 追加してほしい機能</label><br>
+    <label><input type="checkbox" value="見たい条件・データ"> 見たい条件・データ（標高・植生など）</label><br>
+    <label><input type="checkbox" value="使いにくい点・分かりにくい点"> 使いにくい点・分かりにくい点</label><br>
+    <label><input type="checkbox" value="不具合・表示がおかしい"> 不具合・表示がおかしい</label><br>
+    <label><input type="checkbox" value="データの出典・利用について"> データの出典・利用について</label><br>
+    <label><input type="checkbox" value="その他"> その他</label>
+  </div>
+  <div style="margin-top:6px">具体的な内容：<br>
+    <textarea id="fb-text" rows="4" style="width:100%;box-sizing:border-box" placeholder="例：標高500m以上で絞り込みたい"></textarea>
+  </div>
+  <label><input type="checkbox" id="fb-cond" checked> 今の絞り込み条件を添える</label>
+  <div style="margin-top:6px;color:#a33;font-size:12px">GitHub の Issue として公開されます。個人情報や、希少種の正確な位置は書かないでください。</div>
+  <div style="margin-top:8px"><button id="fb-go">GitHubで送る</button> <button id="fb-close">閉じる</button></div>
+  <small>送信には GitHub アカウントが必要です。</small>
 </dialog>
 <dialog id="dlg" style="border:1px solid #888;border-radius:8px;padding:16px;font:13px/1.7 sans-serif;max-width:340px">
   <b style="font-size:15px">PDFレポート作成</b>
@@ -449,6 +471,7 @@ map.on('load', () => {
     report:   () => { $('open-report').click(); },
     white:    () => { setBase('white'); setCheck('gen-on', false); setCheck('slope-on', false); usePreset('many'); setCheck('only', true); setCheck('ov-on', true); },
     route:    () => { setCheck('gen-on', false); setCheck('ov-on', false); openRoute(true); if (!Route.has('start')) Route.locate(); },
+    feedback: () => { $('open-feedback').click(); },
     free:     () => {},
   };
   $('welcome').querySelectorAll('button.opt').forEach(b => b.onclick = () => { $('welcome').close(); GO[b.dataset.go](); });
@@ -461,6 +484,21 @@ map.on('load', () => {
     $('toggle-panel').textContent = h ? 'パネルを表示' : 'パネルを隠す';
   };
   showWelcome();
+  // --- ご要望窓口（GitHub Issues）---
+  $('open-feedback').onclick = () => $('fb').showModal();
+  $('fb-close').onclick = () => $('fb').close();
+  $('fb-go').onclick = () => {
+    const kinds = [...$('fb-opts').querySelectorAll('input:checked')].map(i => i.value);
+    const text = $('fb-text').value.trim();
+    if (!kinds.length && !text) { alert('求めていることを選ぶか、内容を書いてください。'); return; }
+    let body = '## 求めていること\n' + (kinds.length ? kinds.map(k => '- ' + k).join('\n') : '- （未選択）') + '\n\n## 具体的な内容\n' + (text || '（記入なし）') + '\n';
+    if ($('fb-cond').checked) {
+      body += '\n## 送信時の絞り込み条件\n' + CONDS.map(c => { const v = condVal(c), off = c.id in OFF && v === OFF[c.id]; return `- ${c.label} ${off ? '指定なし' : v + (c.unit || '')}`; }).join('\n') + `\n- 該当メッシュ数: ${hits().length}\n`;
+    }
+    const title = 'ご要望: ' + (kinds[0] || text.slice(0, 20));
+    window.open('https://github.com/geoforest001/shiny_b/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body), '_blank', 'noopener');
+    $('fb').close();
+  };
   $('mode').onchange = e => {
     map.setPaintProperty('mesh', 'fill-color', colorExpr(e.target.value));
     legend(e.target.value);
