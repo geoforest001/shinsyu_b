@@ -131,7 +131,7 @@
     該当：<b id="ov-count">-</b> メッシュ
     <label style="margin-left:8px"><input type="checkbox" id="only"> 該当のみ表示</label>
     <div style="margin-top:4px">
-      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button> <button id="open-report">PDFレポート作成…</button>
+      <button id="dl-csv">CSV保存</button> <button id="dl-geo">GeoJSON保存</button> <button id="reset">条件リセット</button> <button id="open-report">レポート作成…</button>
     </div>
     <div style="margin-top:6px"><button id="open-feedback">ご要望・お問い合わせ</button>
     </div>
@@ -190,7 +190,7 @@
   <button class="opt" data-go="gentle">里山（緩傾斜域）の危惧種を見る<small>平均傾斜15°以下</small></button>
   <button class="opt" data-go="surveyed">調査が進み危惧種も多い場所<small>一般記録3000件以上かつ危惧種10件以上</small></button>
   <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
-  <button class="opt" data-go="report">PDFレポートを作る<small>条件を選んで印刷用レポートを出力</small></button>
+  <button class="opt" data-go="report">レポートを作る<small>条件を選んで、PDFまたはPowerPointで出力</small></button>
   <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
   <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
   <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
@@ -438,7 +438,7 @@ map.on('load', () => {
       rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle, '"' + topNames(p.id, 5).replace(/"/g, '""') + '"'].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
   };
-  // --- PDFレポート ---
+  // --- レポート（PDF／PowerPoint）---
   const PRESETS = {
     cur: null,
     many: { r: 10, g: 0 },
