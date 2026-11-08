@@ -92,20 +92,32 @@
   </div>
 
   <div class="sec">
-    <label><input type="checkbox" id="rare-on" checked> <b>絶滅危惧種</b>（約5kmメッシュ）</label><br>
+    <label><input type="checkbox" id="rare-on" checked> <b>希少種</b>（レッドリスト・約5kmメッシュ）</label><br>
+    リスト：
+    <select id="rl-src">
+      <option value="both">環境省＋長野県</option>
+      <option value="env">環境省</option>
+      <option value="nag">長野県</option>
+    </select><br>
+    区分：
+    <select id="rl-level">
+      <option value="vu">絶滅危惧（Ⅰ類・Ⅱ類）</option>
+      <option value="nt">＋準絶滅危惧（NT）</option>
+      <option value="all" selected>＋情報不足（DD）すべて</option>
+    </select><br>
     表示：
     <select id="mode">
       <option value="n">記録数</option>
       <option value="sp">種数</option>
     </select><br>
-    <small>IUCN CR/EN/VU の記録を集計。クリックで内訳。</small>
+    <small id="rl-note">掲載種の記録（GBIF）を集計。クリックで内訳。</small>
     <details style="margin-top:4px">
-      <summary><b>CR/EN/VUとは？</b></summary>
-      <p style="margin:6px 0">IUCN（国際自然保護連合）のレッドリストで、野生生物が絶滅するおそれの高さを示す区分です。この3つを合わせて「絶滅危惧種」と呼びます。</p>
-      <div><b>CR</b>（深刻な危機）：ごく近い将来に野生で絶滅する危険性が極めて高い</div>
-      <div><b>EN</b>（危機）：近い将来に野生で絶滅する危険性が高い</div>
-      <div><b>VU</b>（危急）：絶滅の危険が増大している</div>
-      <p style="margin:6px 0"><small>環境省レッドリストの絶滅危惧IA類・IB類・II類にほぼ対応しますが、評価は別です。ここではIUCN（世界）の評価を使っています。</small></p>
+      <summary><b>区分とリストについて</b></summary>
+      <p style="margin:6px 0">環境省レッドリストと、長野県版レッドリストに掲載された種の記録を、学名でGBIFと突き合わせて集計しています。</p>
+      <div><b>Ⅰ類</b>：絶滅危惧Ⅰ類（環境省はⅠA・ⅠB類、長野県はCR・EN）</div>
+      <div><b>Ⅱ類</b>：絶滅危惧Ⅱ類（VU）</div>
+      <div><b>NT</b>：準絶滅危惧　<b>DD</b>：情報不足</div>
+      <p style="margin:6px 0"><small>環境省：植物・菌類は第5次（2025）、鳥類・爬虫両生類は第5次（2026）、哺乳類・魚類・昆虫・貝類などは2020年版。長野県：植物編2014・動物編2015。「両方」は、どちらかに載る種を集計し、区分は重い方を使います。亜種・変種は取り違えを避けるため対象外です。</small></p>
     </details>
   </div>
 
@@ -135,7 +147,7 @@
     </div>
     <div style="margin-top:6px"><button id="open-feedback">ご要望・お問い合わせ</button>
     </div>
-    <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
+    <small>一般記録には希少種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
   <div class="sec">
     <b>調査ルート案内</b>（試作：諏訪湖周辺・上伊那）<br>
@@ -177,8 +189,8 @@
   <div id="res-body">
       並び順：
       <select id="sort">
-        <option value="n">危惧種の記録数</option>
-        <option value="sp">危惧種の種数</option>
+        <option value="n">希少種の記録数</option>
+        <option value="sp">希少種の種数</option>
         <option value="gen">一般記録数</option>
         <option value="slope">平均傾斜</option>
       </select>
@@ -191,13 +203,13 @@
   <span style="color:#444">何をしたいですか？ 選ぶと、条件と表示を自動で設定します。</span>
   <style>#welcome button.opt { display:block; width:100%; text-align:left; margin:6px 0; padding:8px 10px; border:1px solid #bbb; border-radius:6px; background:#fafafa; font-size:14px; cursor:pointer; }
     #welcome button.opt:hover { background:#eef6ff; } #welcome button.opt small { display:block; color:#555; font-size:12px; }</style>
-  <button class="opt" data-go="many">危惧種が多い場所を探す<small>記録10件以上のメッシュを抽出</small></button>
-  <button class="opt" data-go="steep">急傾斜域の危惧種を見る<small>平均傾斜30°以上。傾斜区分図も表示</small></button>
-  <button class="opt" data-go="gentle">里山（緩傾斜域）の危惧種を見る<small>平均傾斜15°以下</small></button>
-  <button class="opt" data-go="surveyed">調査が進み危惧種も多い場所<small>一般記録3000件以上かつ危惧種10件以上</small></button>
+  <button class="opt" data-go="many">希少種が多い場所を探す<small>記録50件以上のメッシュを抽出</small></button>
+  <button class="opt" data-go="steep">急傾斜域の希少種を見る<small>平均傾斜30°以上。傾斜区分図も表示</small></button>
+  <button class="opt" data-go="gentle">里山（緩傾斜域）の希少種を見る<small>平均傾斜15°以下</small></button>
+  <button class="opt" data-go="surveyed">調査が進み希少種も多い場所<small>一般記録3000件以上かつ希少種50件以上</small></button>
   <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
   <button class="opt" data-go="report">レポートを作る<small>条件を選んで、PDFまたはPowerPointで出力</small></button>
-  <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
+  <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。希少種の多い場所（50件以上）を表示</small></button>
   <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺・上伊那。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
   <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
@@ -206,7 +218,7 @@
 <dialog id="spdlg" style="border:1px solid #888;border-radius:8px;padding:14px 16px;font:13px/1.6 sans-serif;width:min(520px,92vw)">
   <b id="sp-title" style="font-size:15px"></b>
   <div style="margin:6px 0">
-    <button id="sp-tab-rare">危惧種（CR/EN/VU）</button> <button id="sp-tab-gen">一般（記録の多い上位20種）</button>
+    <button id="sp-tab-rare">希少種（レッドリスト）</button> <button id="sp-tab-gen">一般（記録の多い上位20種）</button>
     <button id="sp-close" style="float:right">閉じる</button>
   </div>
   <div id="sp-body" style="max-height:60vh;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:4px 8px;background:#fff"></div>
@@ -236,16 +248,16 @@
   <div style="margin-top:8px">条件：
     <select id="preset">
       <option value="cur">現在の絞り込み条件のまま</option>
-      <option value="many">危惧種が多いメッシュ（記録10件以上）</option>
-      <option value="steep">急傾斜域の危惧種（平均傾斜30°以上）</option>
-      <option value="gentle">緩傾斜域の危惧種（平均傾斜15°以下）</option>
-      <option value="surveyed">調査が進み危惧種も多い（一般3000件以上）</option>
+      <option value="many">希少種が多いメッシュ（記録50件以上）</option>
+      <option value="steep">急傾斜域の希少種（平均傾斜30°以上）</option>
+      <option value="gentle">緩傾斜域の希少種（平均傾斜15°以下）</option>
+      <option value="surveyed">調査が進み希少種も多い（一般3000件以上）</option>
     </select>
   </div>
   <div><small id="preset-sum"></small></div>
   <div style="margin-top:6px">一覧の並び順：
     <select id="rsort">
-      <option value="n">危惧種の記録数</option><option value="sp">危惧種の種数</option>
+      <option value="n">希少種の記録数</option><option value="sp">希少種の種数</option>
       <option value="gen">一般記録数</option><option value="slope">平均傾斜</option>
     </select>
   </div>
@@ -253,7 +265,7 @@
     <label><input type="checkbox" id="inc-map" checked> 地図</label>
     <label><input type="checkbox" id="inc-city" checked> 市町村別集計</label>
     <label><input type="checkbox" id="inc-list" checked> メッシュ一覧</label><br>
-    <label><input type="checkbox" id="inc-sp" checked> 危惧種の種別集計・内訳</label>
+    <label><input type="checkbox" id="inc-sp" checked> 希少種の種別集計・内訳</label>
     <label><input type="checkbox" id="inc-white"> 地図を白地図で出力</label>
   </div>
   <div style="margin-top:6px">出力形式：
@@ -278,16 +290,16 @@
 <script>
 const $ = id => document.getElementById(id);
 const COLORS = ['#ffffb2', '#fecc5c', '#fd8d3c', '#e31a1c'];
-const STEPS = { n: [1, 5, 20, 60], sp: [1, 3, 6, 12] };
+const STEPS = { n: [1, 10, 30, 100], sp: [1, 3, 8, 15] };
 const colorExpr = f => ['step', ['get', f], COLORS[0], STEPS[f][1], COLORS[1], STEPS[f][2], COLORS[2], STEPS[f][3], COLORS[3]];
 function legend(f) {
   const s = STEPS[f];
   const rows = COLORS.map((c, i) => `<div><i style="background:${c}"></i>${i < 3 ? (s[i] === s[i + 1] - 1 ? s[i] : s[i] + '–' + (s[i + 1] - 1)) : s[3] + '以上'}</div>`);
-  $('legend').innerHTML = '<b>絶滅危惧種：' + (f === 'n' ? '記録数' : '種数') + '</b>' + rows.join('');
+  $('legend').innerHTML = '<b>希少種：' + (f === 'n' ? '記録数' : '種数') + '</b>' + rows.join('');
 }
 // 絞り込み条件: prop=メッシュ属性, op=比較, def=初期値(ほぼ無効)
 const CONDS = [
-  { id: 'r',  prop: 'n',      op: '>=', min: 1,  max: 30,   step: 1,   def: 3,    label: '危惧種の記録数 ≧' },
+  { id: 'r',  prop: 'n',      op: '>=', min: 1,  max: 500,  step: 5,   def: 10,    label: '希少種の記録数 ≧' },
   { id: 'g',  prop: 'gen',    op: '>=', min: 0,  max: 5000, step: 100, def: 1000, label: '一般記録数 ≧', note: '（中央値 約600）' },
   { id: 'sa', prop: 'slope',  op: '>=', min: 0,  max: 45,   step: 1,   def: 0,    label: '平均傾斜 ≧', unit: '°' },
   { id: 'sb', prop: 'slope',  op: '<=', min: 0,  max: 45,   step: 1,   def: 45,   label: '平均傾斜 ≦', unit: '°' },
@@ -327,7 +339,7 @@ $('res-toggle').onclick = () => {
   $('res-toggle').setAttribute('aria-expanded', open);
 };
 
-// 重なり順: 地図 < 一般分布(gen) < 絶滅危惧種(mesh) < 県外マスク(mask)
+// 重なり順: 地図 < 一般分布(gen) < 希少種(mesh) < 県外マスク(mask)
 const addGen = () => {
   if (map.getLayer('gen')) map.removeLayer('gen');
   if (map.getSource('gen')) map.removeSource('gen');
@@ -347,7 +359,7 @@ map.on('load', () => {
   map.addSource('slope-live', { type: 'raster', tileSize: 256, minzoom: SLOPE_LIVE_Z, maxzoom: Slope.MAX_DEM_Z, tiles: [Slope.tileUrl()],
     attribution: '傾斜: 国土地理院 標高タイルから計算' });
   map.addLayer({ id: 'slope-live', type: 'raster', source: 'slope-live', minzoom: SLOPE_LIVE_Z, paint: { 'raster-opacity': 0.65, 'raster-fade-duration': 0 }, layout: { visibility: 'none' } });
-  map.addSource('mesh', { type: 'geojson', data: 'data/grid_nagano.geojson' });
+  map.addSource('mesh', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });  // 集計値は applyRL() で入れる
   map.addLayer({ id: 'mesh', type: 'fill', source: 'mesh',
     filter: ['>', ['get', 'n'], 0],
     paint: { 'fill-color': colorExpr('n'), 'fill-opacity': 0.55, 'fill-outline-color': '#ffffff99' },
@@ -421,7 +433,7 @@ map.on('load', () => {
 
   // --- 重なり抽出 ---
   let grid = null;
-  fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; MeshInfo.set({ grid: g }); updateOv(); });
+  fetch('data/grid_nagano.geojson').then(r => r.json()).then(g => { grid = g; MeshInfo.set({ grid: g }); applyRL(); });
   const hits = () => grid ? grid.features.filter(f => CONDS.every(c => OPS[c.op](f.properties[c.prop], condVal(c)))) : [];
   function updateOv() {
     CONDS.forEach(c => $('v-' + c.id).textContent = condVal(c));
@@ -439,7 +451,7 @@ map.on('load', () => {
     const k = $('sort').value;
     const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
     $('res-count').textContent = `（${rows.length}件）`;
-    $('results').innerHTML = '<table><tr><th>市町村</th><th>危惧種</th><th>種</th><th>一般</th><th>傾斜</th></tr>' +
+    $('results').innerHTML = '<table><tr><th>市町村</th><th>希少種</th><th>種</th><th>一般</th><th>傾斜</th></tr>' +
       rows.map((f, i) => { const p = f.properties; return `<tr class="row" data-i="${i}"><td>${p.city}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.gen}</td><td>${p.slope}°</td></tr>`; }).join('') + '</table>';
     $('results').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => {
       const f = rows[+tr.dataset.i], b = bboxOf(f);
@@ -457,18 +469,18 @@ map.on('load', () => {
   const save = (name, type, text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   $('dl-geo').onclick = () => save('overlap_mesh.geojson', 'application/geo+json', JSON.stringify({ type: 'FeatureCollection', features: hits() }));
   $('dl-csv').onclick = () => {
-    const rows = ['市町村,緯度(中心),経度(中心),危惧種記録数,危惧種種数,CR,EN,VU,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%),主な危惧種（上位5種）'];
+    const rows = ['市町村,緯度(中心),経度(中心),希少種記録数,希少種種数,Ⅰ類,Ⅱ類,NT,DD,一般記録数,平均傾斜(度),急傾斜率(%),緩傾斜率(%),主な希少種（上位5種）'];
     hits().forEach(f => { const c = f.geometry.coordinates[0], p = f.properties;
-      rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.CR, p.EN, p.VU, p.gen, p.slope, p.steep, p.gentle, '"' + topNames(p.id, 5).replace(/"/g, '""') + '"'].join(',')); });
+      rows.push([p.city, ((c[0][1] + c[2][1]) / 2).toFixed(3), ((c[0][0] + c[2][0]) / 2).toFixed(3), p.n, p.sp, p.I, p.VU, p.NT, p.DD, p.gen, p.slope, p.steep, p.gentle, '"' + topNames(p.id, 5).replace(/"/g, '""') + '"'].join(',')); });
     save('overlap_mesh.csv', 'text/csv', '\ufeff' + rows.join('\n'));
   };
   // --- レポート（PDF／PowerPoint）---
   const PRESETS = {
     cur: null,
-    many: { r: 10, g: 0 },
-    steep: { r: 3, g: 0, sa: 30 },
-    gentle: { r: 3, g: 0, sb: 15 },
-    surveyed: { r: 10, g: 3000 },
+    many: { r: 50, g: 0 },
+    steep: { r: 10, g: 0, sa: 30 },
+    gentle: { r: 10, g: 0, sb: 15 },
+    surveyed: { r: 50, g: 3000 },
   };
   const OFF = { sa: 0, sb: 45, st: 100, ge: 0 };
   const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
@@ -528,7 +540,7 @@ map.on('load', () => {
     const cityRows = Object.entries(byCity).sort((a, b) => b[1].n - a[1].n).map(([name, c]) =>
       `<tr><td>${esc(name)}</td><td>${c.m}</td><td>${c.n}</td><td>${c.g}</td><td>${(c.s / c.m).toFixed(1)}°</td></tr>`).join('');
     const listRows = rows.map(f => { const p = f.properties, c = f.geometry.coordinates[0];
-      return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.CR}/${p.EN}/${p.VU}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td><td style="text-align:left;font-size:9.5px">${esc(topNames(p.id, 5))}</td></tr>`; }).join('');
+      return `<tr><td>${esc(p.city)}</td><td>${((c[0][1] + c[2][1]) / 2).toFixed(3)}</td><td>${((c[0][0] + c[2][0]) / 2).toFixed(3)}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.I}/${p.VU}/${p.NT}/${p.DD}</td><td>${p.gen}</td><td>${p.slope}°</td><td>${p.steep}%</td><td style="text-align:left;font-size:9.5px">${esc(topNames(p.id, 5))}</td></tr>`; }).join('');
     const d = new Date(), ds = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
     const brk = MeshInfo.breakdown(rows), agg = MeshInfo.agg(rows);
     if (fmt === 'pptx') {
@@ -541,8 +553,8 @@ map.on('load', () => {
       $('busy').style.display = 'none';
       return;
     }
-    const spRows = agg.slice(0, 40).map(x => `<tr><td>${x.ja ? esc(x.ja) + '　' : ''}<i style="color:#555">${esc(x.sci)}</i></td><td style="text-align:center">${x.cat}</td><td>${x.meshes}</td><td>${x.n}</td></tr>`).join('');
-    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>長野県 絶滅危惧種 分布レポート</title><style>
+    const spRows = agg.slice(0, 40).map(x => `<tr><td>${x.ja ? esc(x.ja) + '　' : ''}<i style="color:#555">${esc(x.sci)}</i></td><td style="text-align:center">${MeshInfo.catName(x.cat)}</td><td>${x.meshes}</td><td>${x.n}</td></tr>`).join('');
+    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>長野県 希少種 分布レポート</title><style>
       @page { size: A4; margin: 14mm; }
       body { font: 12px/1.6 'Hiragino Sans','Yu Gothic',sans-serif; color: #111; }
       h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; border-bottom: 2px solid #2e7d32; margin: 16px 0 6px; padding-bottom: 2px; }
@@ -554,18 +566,18 @@ map.on('load', () => {
       small { color: #555; } .noprint { margin: 8px 0; } @media print { .noprint { display: none; } }
     </style></head><body>
     <div class="noprint"><button onclick="print()">印刷 / PDFに保存</button></div>
-    <h1>長野県 絶滅危惧種 分布レポート</h1>
-    <small>作成日：${ds} ／ 該当 ${rows.length} メッシュ（5km）／ 危惧種の記録 合計 ${brk.n} 件（CR ${brk.CR}・EN ${brk.EN}・VU ${brk.VU}／動物 ${brk.animal}・植物 ${brk.plant}・菌類 ${brk.fungus}）</small>
+    <h1>長野県 希少種 分布レポート</h1>
+    <small>作成日：${ds} ／ 該当 ${rows.length} メッシュ（5km）／ 希少種の記録 合計 ${brk.n} 件（Ⅰ類 ${brk.I}・Ⅱ類 ${brk.VU}・NT ${brk.NT}・DD ${brk.DD}／動物 ${brk.animal}・植物 ${brk.plant}・菌類 ${brk.fungus}）</small>
     <h2>1. 抽出条件</h2>
     <table class="cond"><tr><th>条件</th><th>値</th></tr>${condText()}</table>
-    ${img ? `<h2>2. 該当メッシュの分布</h2><img src="${img}"><div class="legend"><small>紫の枠＝条件に合うメッシュ。黄〜赤＝危惧種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。</small></div>` : ''}
-    ${$('inc-city').checked ? `<h2>3. 市町村別集計</h2><table><tr><th>市町村</th><th>メッシュ数</th><th>危惧種 記録数</th><th>一般記録数</th><th>平均傾斜</th></tr>${cityRows}</table>` : ''}
-    ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>危惧種 記録</th><th>種数</th><th>CR/EN/VU</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th><th>主な危惧種</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
-    ${$('inc-sp').checked && agg.length ? `<h2>5. 危惧種の種別集計${agg.length > 40 ? '（記録数の上位40種）' : ''}</h2><table><thead><tr><th>種名（和名・学名）</th><th>区分</th><th>出現メッシュ数</th><th>記録数</th></tr></thead><tbody>${spRows}</tbody></table><small>全 ${agg.length} 種。区分はGBIFが照合したIUCNの区分です。栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。</small>` : ''}
+    ${img ? `<h2>2. 該当メッシュの分布</h2><img src="${img}"><div class="legend"><small>紫の枠＝条件に合うメッシュ。黄〜赤＝希少種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。</small></div>` : ''}
+    ${$('inc-city').checked ? `<h2>3. 市町村別集計</h2><table><tr><th>市町村</th><th>メッシュ数</th><th>希少種 記録数</th><th>一般記録数</th><th>平均傾斜</th></tr>${cityRows}</table>` : ''}
+    ${$('inc-list').checked ? `<h2>4. 該当メッシュ一覧</h2><table><thead><tr><th>市町村</th><th>緯度</th><th>経度</th><th>希少種 記録</th><th>種数</th><th>Ⅰ類/Ⅱ類/NT/DD</th><th>一般記録</th><th>平均傾斜</th><th>急傾斜率</th><th>主な希少種</th></tr></thead><tbody>${listRows}</tbody></table>` : ''}
+    ${$('inc-sp').checked && agg.length ? `<h2>5. 希少種の種別集計${agg.length > 40 ? '（記録数の上位40種）' : ''}</h2><table><thead><tr><th>種名（和名・学名）</th><th>区分</th><th>出現メッシュ数</th><th>記録数</th></tr></thead><tbody>${spRows}</tbody></table><small>全 ${agg.length} 種。区分はリストの区分（Ⅰ類・Ⅱ類・NT・DD。両方のときは重い方）です。栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。</small>` : ''}
     <h2>注意事項・出典</h2>
-    <small>・危惧種は IUCN レッドリスト CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計。希少種保護のため個別の位置は掲載していません。<br>
+    <small>・希少種は ${esc(MeshInfo.label())} の掲載種の出現記録（GBIF）を、学名で突き合わせて約5kmメッシュに集計。希少種保護のため個別の位置は掲載していません。<br>
     ・記録数は調査の多さを反映します。記録の多い場所が、必ずしも生き物の多い場所とは限りません。<br>
-    ・一般記録数には危惧種の記録も含まれます。緯度経度はメッシュの中心です。市町村は中心点の所在地です。<br>
+    ・一般記録数には希少種の記録も含まれます。緯度経度はメッシュの中心です。市町村は中心点の所在地です。<br>
     ・傾斜は国土地理院DEM10mから集計。出典：GBIF（gbif.org）、国土地理院。</small>
     </body></html>`;
     w.document.open(); w.document.write(html); w.document.close();
@@ -616,11 +628,35 @@ map.on('load', () => {
     legend(e.target.value);
   };
   const popupHtml = p =>
-      `<b>${p.city}</b><br><b>絶滅危惧種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>CR ${p.CR} ・ EN ${p.EN} ・ VU ${p.VU}<br>` +
+      `<b>${p.city}</b><br><b>希少種 記録数 ${p.n} / 種数 ${p.sp}</b><br>一般記録数 ${p.gen}<br>平均傾斜 ${p.slope}° ・ 急傾斜 ${p.steep}% ・ 緩傾斜 ${p.gentle}%<br>Ⅰ類 ${p.I} ・ Ⅱ類 ${p.VU} ・ NT ${p.NT} ・ DD ${p.DD}<br>` +
       `動物 ${p['動物']} ・ 植物 ${p['植物']} ・ 菌類 ${p['菌類']}`;
-  // --- 種名（危惧種：data/rare_species.json、一般：GBIF から取得）---
+  // --- レッドリスト（環境省／長野県）の選択。メッシュの集計値をここで計算し、地図・絞り込み・レポートに反映する ---
+  // data/rare_{env,nag,both}.json = {メッシュid: [[学名, 和名, 記録数, 区分(I/VU/NT/DD), 分類群(a/p/f)], ...]}（tools/build_redlist.py）
+  const RLTXT = { env: '環境省レッドリスト', nag: '長野県版レッドリスト', both: '環境省・長野県のレッドリスト' };
+  const RLLV = { vu: ['I', 'VU'], nt: ['I', 'VU', 'NT'], all: ['I', 'VU', 'NT', 'DD'] };
+  const RLLVTXT = { vu: '絶滅危惧（Ⅰ類・Ⅱ類）', nt: '絶滅危惧と準絶滅危惧', all: '準絶滅危惧・情報不足を含むすべての区分' };
+  const RLDATA = {};
   let rareSp = {};
-  fetch('data/rare_species.json').then(r => r.json()).then(d => { rareSp = d; MeshInfo.set({ rare: d }); }).catch(() => {});
+  async function applyRL() {
+    const src = $('rl-src').value, lv = $('rl-level').value;
+    try { if (!RLDATA[src]) RLDATA[src] = await (await fetch(`data/rare_${src}.json`)).json(); }
+    catch (e) { $('rl-note').textContent = 'レッドリストのデータを読み込めませんでした。'; return; }
+    if (!grid) return;
+    const allow = new Set(RLLV[lv]), GR = { a: '動物', p: '植物', f: '菌類' };
+    rareSp = {};
+    grid.features.forEach(f => {
+      const p = f.properties, L = (RLDATA[src][p.id] || []).filter(x => allow.has(x[3]));
+      delete p.CR; delete p.EN;
+      Object.assign(p, { n: 0, sp: L.length, I: 0, VU: 0, NT: 0, DD: 0, '動物': 0, '植物': 0, '菌類': 0 });
+      L.forEach(x => { p.n += x[2]; p[x[3]] += x[2]; p[GR[x[4]]] += x[2]; });
+      if (L.length) rareSp[p.id] = L;
+    });
+    MeshInfo.set({ rare: rareSp, label: RLTXT[src] + '（' + RLLVTXT[lv] + '）' });
+    $('rl-note').textContent = RLTXT[src] + '（' + RLLVTXT[lv] + '）の掲載種の記録を集計。クリックで内訳。';
+    map.getSource('mesh').setData(grid);
+    updateOv();
+  }
+  $('rl-src').onchange = $('rl-level').onchange = applyRL;
   const topNames = (id, n) => (rareSp[id] || []).slice(0, n).map(x => x[1] || x[0]).join('、');
   const CELL = 0.05, cellPoly = id => { const [a, b] = id.split('_').map(Number), x0 = b * CELL, y0 = a * CELL, x1 = x0 + CELL, y1 = y0 + CELL;
     return `POLYGON((${x0.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y0.toFixed(4)},${x1.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y1.toFixed(4)},${x0.toFixed(4)} ${y0.toFixed(4)}))`; };
@@ -650,8 +686,8 @@ map.on('load', () => {
     const body = $('sp-body'); $('sp-tab-rare').disabled = tab === 'rare'; $('sp-tab-gen').disabled = tab === 'gen';
     if (tab === 'rare') {
       const L = rareSp[props.id] || [];
-      body.innerHTML = spTable('<th>区分</th>', L.map(x => spRow(x[0], x[1], x[2], x[3])));
-      $('sp-note').textContent = 'IUCN CR/EN/VU の記録がある種（GBIF）。和名がない種は学名のみです。区分はGBIFの照合結果に基づくため、栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。県境のメッシュは他県の記録が入り、メッシュの記録数と一致しない場合があります。位置は5kmメッシュ単位までです。';
+      body.innerHTML = spTable('<th>区分</th>', L.map(x => spRow(x[0], x[1], x[2], MeshInfo.catName(x[3]))));
+      $('sp-note').textContent = MeshInfo.label() + ' の掲載種で、GBIFに記録がある種です。区分はリストの区分（Ⅰ類・Ⅱ類・NT・DD）で、「両方」のときは重い方です。栽培・外来の記録や学名の対応の違いで、野生の希少種とは限らない種が混じることがあります。県境のメッシュは他県の記録が入り、メッシュの記録数と一致しない場合があります。位置は5kmメッシュ単位までです。';
     } else {
       body.textContent = '取得中…';
       $('sp-note').textContent = '記録数の多い順の上位20種（GBIF、いま取得）。分類群は左パネルの「一般分布」の選択に合わせます。調査の多い種が上位になります。';

@@ -44,15 +44,15 @@ const ReportPptx = (() => {
   // ---- 絞り込み結果 ----
   // rep: { ds, rows(features), conds[[ラベル,値]], img, byCity[[名前,{m,n,g,s}]], agg[], brk, use:{map,city,list,sp}, topNames(id,n) }
   async function filter(rep) {
-    const p = deck('長野県 絶滅危惧種 分布レポート');
+    const p = deck('長野県 希少種 分布レポート');
     const b = rep.brk;
     let s = p.addSlide();
     s.background = { color: 'F4F8F4' };
-    s.addText('長野県 絶滅危惧種 分布レポート', { x: 0.6, y: 1.3, w: W - 1.2, h: 1, fontFace: FONT, fontSize: 38, bold: true, color: GREEN });
+    s.addText('長野県 希少種 分布レポート', { x: 0.6, y: 1.3, w: W - 1.2, h: 1, fontFace: FONT, fontSize: 38, bold: true, color: GREEN });
     s.addText(`作成日：${rep.ds}　／　該当 ${rep.rows.length} メッシュ（5km）`, { x: 0.6, y: 2.4, w: W - 1.2, h: 0.5, fontFace: FONT, fontSize: 18, color: '333333' });
-    table(s, [head(['危惧種の記録（合計）', 'CR', 'EN', 'VU', '動物', '植物', '菌類', '一般記録（参考）']), [C(b.n, { align: 'center', fs: 16, bold: true }), ...[b.CR, b.EN, b.VU, b.animal, b.plant, b.fungus, b.gen].map(v => C(v, { align: 'center', fs: 16 }))]],
+    table(s, [head(['希少種の記録（合計）', 'Ⅰ類', 'Ⅱ類', 'NT', 'DD', '動物', '植物', '菌類', '一般記録（参考）']), [C(b.n, { align: 'center', fs: 16, bold: true }), ...[b.I, b.VU, b.NT, b.DD, b.animal, b.plant, b.fungus, b.gen].map(v => C(v, { align: 'center', fs: 16 }))]],
       { x: 0.6, y: 3.4, w: W - 1.2, rowH: 0.55, fs: 13, colW: [2.6, 1.2, 1.2, 1.2, 1.4, 1.4, 1.4, 2.13] });
-    s.addText('出典：GBIF（gbif.org）、IUCNレッドリスト、国土地理院。希少種保護のため、位置は約5kmメッシュ単位までです。', { x: 0.6, y: 6.6, w: W - 1.2, h: 0.4, fontFace: FONT, fontSize: 11, color: '555555' });
+    s.addText('出典：GBIF（gbif.org）、' + MeshInfo.label() + '、国土地理院。希少種保護のため、位置は約5kmメッシュ単位までです。', { x: 0.6, y: 6.6, w: W - 1.2, h: 0.4, fontFace: FONT, fontSize: 11, color: '555555' });
 
     s = slide(p, '1. 抽出条件', GREEN);
     table(s, [head(['条件', '値']), ...rep.conds.map(([l, v]) => [C(l), C(v, { align: 'center' })])], { colW: [7.5, 5.03], rowH: 0.45, fs: 14 });
@@ -60,32 +60,32 @@ const ReportPptx = (() => {
     if (rep.use.map && rep.img) {
       s = slide(p, '2. 該当メッシュの分布', GREEN);
       await fitImage(s, rep.img, { x: 0.4, y: 1.0, w: W - 0.8, h: H - 1.9 });
-      note(s, '紫の枠＝条件に合うメッシュ。黄〜赤＝危惧種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。');
+      note(s, '紫の枠＝条件に合うメッシュ。黄〜赤＝希少種の記録数（1–4 / 5–19 / 20–59 / 60以上）。緑＝一般記録の密度（GBIF）。県外は白く表示。');
     }
     if (rep.use.city) chunk(rep.byCity, 12).forEach((part, i, all) => {
       s = slide(p, `3. 市町村別集計${all.length > 1 ? `（${i + 1}/${all.length}）` : ''}`, GREEN);
-      table(s, [head(['市町村', 'メッシュ数', '危惧種 記録数', '一般記録数', '平均傾斜']), ...part.map(([n, c]) => [C(n), C(c.m, { align: 'right' }), C(c.n, { align: 'right' }), C(c.g, { align: 'right' }), C((c.s / c.m).toFixed(1) + '°', { align: 'right' })])],
+      table(s, [head(['市町村', 'メッシュ数', '希少種 記録数', '一般記録数', '平均傾斜']), ...part.map(([n, c]) => [C(n), C(c.m, { align: 'right' }), C(c.n, { align: 'right' }), C(c.g, { align: 'right' }), C((c.s / c.m).toFixed(1) + '°', { align: 'right' })])],
         { colW: [4.2, 2, 2.4, 2, 1.93], rowH: 0.4, fs: 13 });
     });
     if (rep.use.sp && rep.agg.length) chunk(rep.agg, 11).slice(0, 4).forEach((part, i, all) => {
-      s = slide(p, `4. 危惧種の種別集計${all.length > 1 ? `（${i + 1}/${all.length}）` : ''}`, GREEN);
-      table(s, [head(['種名（和名・学名）', '区分', '出現メッシュ数', '記録数']), ...part.map(x => [C(spName(x), { fs: 12 }), C(x.cat, { align: 'center' }), C(x.meshes, { align: 'right' }), C(x.n, { align: 'right' })])],
+      s = slide(p, `4. 希少種の種別集計${all.length > 1 ? `（${i + 1}/${all.length}）` : ''}`, GREEN);
+      table(s, [head(['種名（和名・学名）', '区分', '出現メッシュ数', '記録数']), ...part.map(x => [C(spName(x), { fs: 12 }), C(MeshInfo.catName(x.cat), { align: 'center' }), C(x.meshes, { align: 'right' }), C(x.n, { align: 'right' })])],
         { colW: [7.2, 1.3, 2.2, 1.83], rowH: 0.42, fs: 12 });
       if (i === all.length - 1 && rep.agg.length > 44) note(s, `記録数の多い上位44種を表示（全 ${rep.agg.length} 種）。`);
-      else note(s, '区分はGBIFが照合したIUCNの区分です。栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。');
+      else note(s, '区分はリストの区分（Ⅰ類・Ⅱ類・NT・DD。両方のときは重い方）です。栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。');
     });
     if (rep.use.list) chunk(rep.rows, 10).forEach((part, i, all) => {
       s = slide(p, `5. 該当メッシュ一覧（${i + 1}/${all.length}）`, GREEN);
-      table(s, [head(['市町村', '緯度', '経度', '危惧種', '種数', '一般記録', '平均傾斜', '主な危惧種']), ...part.map(f => { const q = f.properties, c = f.geometry.coordinates[0];
+      table(s, [head(['市町村', '緯度', '経度', '希少種', '種数', '一般記録', '平均傾斜', '主な希少種']), ...part.map(f => { const q = f.properties, c = f.geometry.coordinates[0];
         return [C(q.city, { fs: 11 }), C(((c[0][1] + c[2][1]) / 2).toFixed(3), { align: 'right', fs: 10 }), C(((c[0][0] + c[2][0]) / 2).toFixed(3), { align: 'right', fs: 10 }), C(q.n, { align: 'right', fs: 11 }), C(q.sp, { align: 'right', fs: 11 }),
           C(q.gen, { align: 'right', fs: 11 }), C(q.slope + '°', { align: 'right', fs: 11 }), C(rep.topNames(q.id, 5), { fs: 9 })]; })],
         { colW: [1.5, 0.95, 0.95, 0.85, 0.7, 1.0, 1.0, 5.58], rowH: 0.5, fs: 11 });
     });
     s = slide(p, '注意事項・出典', GREEN);
     s.addText([
-      '・危惧種は IUCN レッドリスト CR/EN/VU の出現記録（GBIF）を約5kmメッシュに集計しています。希少種保護のため、個別の位置は掲載していません。',
+      '・希少種は ' + MeshInfo.label() + ' の掲載種の出現記録（GBIF）を、学名で突き合わせて約5kmメッシュに集計しています。希少種保護のため、個別の位置は掲載していません。',
       '・記録数は調査の多さを反映します。記録の多い場所が、必ずしも生き物の多い場所とは限りません。',
-      '・一般記録数には危惧種の記録も含まれます。緯度経度はメッシュの中心、市町村は中心点の所在地です。',
+      '・一般記録数には希少種の記録も含まれます。緯度経度はメッシュの中心、市町村は中心点の所在地です。',
       '・傾斜は国土地理院DEM10mから集計しました。',
       '・出典：GBIF（gbif.org）、国土地理院。',
     ].join('\n'), { x: 0.6, y: 1.2, w: W - 1.2, h: 5, fontFace: FONT, fontSize: 16, color: '222222', valign: 'top', paraSpaceAfter: 10 });
@@ -118,23 +118,23 @@ const ReportPptx = (() => {
     if (d.species) {
       const sp = d.species;
       if (sp.along.length) chunk(sp.along, 9).forEach((part, i, all) => {
-        s = slide(p, `4. ルート沿いの危惧種${all.length > 1 ? `（${i + 1}/${all.length}）` : ''}`, BLUE);
-        table(s, [head(['市町村（メッシュ）', '危惧種 記録', '種数', '主な危惧種', '一般記録']), ...part.map(m => [C(m.city, { fs: 11 }), C(m.n, { align: 'right', fs: 11 }), C(m.sp, { align: 'right', fs: 11 }),
+        s = slide(p, `4. ルート沿いの希少種${all.length > 1 ? `（${i + 1}/${all.length}）` : ''}`, BLUE);
+        table(s, [head(['市町村（メッシュ）', '希少種 記録', '種数', '主な希少種', '一般記録']), ...part.map(m => [C(m.city, { fs: 11 }), C(m.n, { align: 'right', fs: 11 }), C(m.sp, { align: 'right', fs: 11 }),
           C(m.species.slice(0, 6).map(x => x[1] || x[0]).join('、') || '—', { fs: 10 }), C(m.gen, { align: 'right', fs: 11 })])],
           { colW: [2.2, 1.3, 0.9, 6.5, 1.63], rowH: 0.52, fs: 11 });
         note(s, '経路が通る約5kmメッシュの集計です。経路上の位置を示すものではありません。希少種の生育・生息地では、踏み荒らしや採取をしないでください。');
       });
       if (sp.goal) {
         s = slide(p, '5. 目的地周辺（5kmメッシュ）の生き物', BLUE);
-        s.addText(`${sp.goal.city}　危惧種 記録 ${sp.goal.n}・種数 ${sp.goal.sp}　／　一般記録 ${sp.goal.gen}`, { x: 0.4, y: 1.0, w: W - 0.8, h: 0.4, fontFace: FONT, fontSize: 14, bold: true, color: '222222' });
-        s.addText('危惧種（CR/EN/VU）', { x: 0.4, y: 1.5, w: 6, h: 0.35, fontFace: FONT, fontSize: 13, bold: true, color: 'B71C1C' });
-        table(s, [head(['種名', '区分', '記録']), ...sp.goal.species.slice(0, 10).map(x => [C(x[1] ? x[1] + '（' + x[0] + '）' : x[0], { fs: 9 }), C(x[3], { align: 'center', fs: 10 }), C(x[2], { align: 'right', fs: 10 })])],
+        s.addText(`${sp.goal.city}　希少種 記録 ${sp.goal.n}・種数 ${sp.goal.sp}　／　一般記録 ${sp.goal.gen}`, { x: 0.4, y: 1.0, w: W - 0.8, h: 0.4, fontFace: FONT, fontSize: 14, bold: true, color: '222222' });
+        s.addText('希少種（' + MeshInfo.label() + '）', { x: 0.4, y: 1.5, w: 6, h: 0.35, fontFace: FONT, fontSize: 13, bold: true, color: 'B71C1C' });
+        table(s, [head(['種名', '区分', '記録']), ...sp.goal.species.slice(0, 10).map(x => [C(x[1] ? x[1] + '（' + x[0] + '）' : x[0], { fs: 9 }), C(MeshInfo.catName(x[3]), { align: 'center', fs: 10 }), C(x[2], { align: 'right', fs: 10 })])],
           { x: 0.4, y: 1.9, w: 6.2, colW: [4.4, 0.8, 1.0], rowH: 0.38, fs: 10 });
         s.addText('一般（記録の多い上位10種）', { x: 6.9, y: 1.5, w: 6, h: 0.35, fontFace: FONT, fontSize: 13, bold: true, color: '1B5E20' });
         if (sp.general && sp.general.length) table(s, [head(['種名', '記録']), ...sp.general.map(x => [C(x.ja ? x.ja + '（' + x.sci + '）' : x.sci, { fs: 9 }), C(x.n, { align: 'right', fs: 10 })])],
           { x: 6.9, y: 1.9, w: 6.03, colW: [4.9, 1.13], rowH: 0.38, fs: 10 });
         else s.addText('（GBIF から取得できませんでした）', { x: 6.9, y: 1.9, w: 6, h: 0.4, fontFace: FONT, fontSize: 11, color: '777777' });
-        note(s, '記録数は調査の多さを反映します。区分はGBIFが照合したIUCNの区分で、野生の希少種とは限らない種が混じることがあります。');
+        note(s, '記録数は調査の多さを反映します。区分はリストの区分で、野生の希少種とは限らない種が混じることがあります。');
       }
     }
     s = slide(p, '注意事項', BLUE);

@@ -40,7 +40,7 @@ const RouteReport = (() => {
     ctx.fillStyle = '#222'; ctx.beginPath(); ctx.moveTo(x, y - 18 * s); ctx.lineTo(x + 7 * s, y + 2 * s); ctx.lineTo(x, y - 3 * s); ctx.lineTo(x - 7 * s, y + 2 * s); ctx.closePath(); ctx.fill();
     ctx.font = `bold ${10 * s}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('N', x, y + 12 * s);
   }
-  // 撮影中だけ隠すレイヤ（絶滅危惧種のメッシュ・条件に合うメッシュ・選択中のメッシュ）。経路を見やすくするため
+  // 撮影中だけ隠すレイヤ（希少種のメッシュ・条件に合うメッシュ・選択中のメッシュ）。経路を見やすくするため
   const HIDE = ['mesh', 'ov-fill', 'ov-line', 'sel-line'];
   async function capture(r) {
     const prev = { c: map.getCenter(), z: map.getZoom() };
@@ -147,12 +147,12 @@ const RouteReport = (() => {
     ];
     if (document.getElementById('base').value !== 'white') items.push('背景地図：国土地理院 地理院タイル（淡色地図）<a href="https://maps.gsi.go.jp/development/ichiran.html">https://maps.gsi.go.jp/development/ichiran.html</a>');
     items.push('地名検索：国土地理院 地名検索API');
-    items.push('危惧種・一般種の出現記録：GBIF（<a href="https://www.gbif.org">https://www.gbif.org</a>）。危惧種の区分は IUCN レッドリスト（CR/EN/VU）');
+    items.push('希少種・一般種の出現記録：GBIF（<a href="https://www.gbif.org">https://www.gbif.org</a>）。希少種の区分は ' + esc(MeshInfo.label()));
     items.push('経路と所要時間は本ツールが計算したものです（徒歩の登り下りは Tobler の歩行関数による）。データ提供者は経路の内容に責任を負いません。');
     return items.map(t => `<li>${t}</li>`).join('');
   }
 
-  // ---- ルート沿い・目的地周辺の危惧種など（MeshInfo：mesh_info.js）----
+  // ---- ルート沿い・目的地周辺の希少種など（MeshInfo：mesh_info.js）----
   const strip = h => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
   async function speciesData(r) {
     if (!r.path || typeof MeshInfo === 'undefined' || !MeshInfo.ready()) return null;
@@ -164,14 +164,14 @@ const RouteReport = (() => {
   function speciesHtml(sp, n) {
     if (!sp) return '';
     const near = sp.along.map(m => `<tr><td class="l">${esc(m.city)}</td><td>${m.n}</td><td>${m.sp}</td><td class="l" style="font-size:10px">${esc(m.species.slice(0, 6).map(x => x[1] || x[0]).join('、') || '—')}</td><td>${m.gen}</td></tr>`).join('');
-    let h = `<h2>${n}. ルート沿い・目的地周辺の危惧種など</h2>`;
-    if (sp.along.length) h += `<b>ルートが通る5kmメッシュの危惧種（通る順）</b><table><thead><tr><th>市町村（メッシュ）</th><th>危惧種 記録</th><th>種数</th><th>主な危惧種</th><th>一般記録</th></tr></thead><tbody>${near}</tbody></table>`;
+    let h = `<h2>${n}. ルート沿い・目的地周辺の希少種など</h2>`;
+    if (sp.along.length) h += `<b>ルートが通る5kmメッシュの希少種（通る順）</b><table><thead><tr><th>市町村（メッシュ）</th><th>希少種 記録</th><th>種数</th><th>主な希少種</th><th>一般記録</th></tr></thead><tbody>${near}</tbody></table>`;
     if (sp.goal) {
-      h += `<p style="margin:8px 0 2px"><b>目的地のメッシュ（${esc(sp.goal.city)}）</b>　危惧種 記録 ${sp.goal.n}・種数 ${sp.goal.sp}／一般記録 ${sp.goal.gen}</p>`;
-      h += `<table style="width:49%;float:left"><thead><tr><th>危惧種（CR/EN/VU）</th><th>区分</th><th>記録</th></tr></thead><tbody>${sp.goal.species.slice(0, 12).map(x => `<tr><td class="l">${spN({ ja: x[1], sci: x[0] })}</td><td style="text-align:center">${x[3]}</td><td>${x[2]}</td></tr>`).join('') || '<tr><td colspan="3" class="l">該当なし</td></tr>'}</tbody></table>`;
+      h += `<p style="margin:8px 0 2px"><b>目的地のメッシュ（${esc(sp.goal.city)}）</b>　希少種 記録 ${sp.goal.n}・種数 ${sp.goal.sp}／一般記録 ${sp.goal.gen}</p>`;
+      h += `<table style="width:49%;float:left"><thead><tr><th>希少種（レッドリスト）</th><th>区分</th><th>記録</th></tr></thead><tbody>${sp.goal.species.slice(0, 12).map(x => `<tr><td class="l">${spN({ ja: x[1], sci: x[0] })}</td><td style="text-align:center">${MeshInfo.catName(x[3])}</td><td>${x[2]}</td></tr>`).join('') || '<tr><td colspan="3" class="l">該当なし</td></tr>'}</tbody></table>`;
       h += `<table style="width:49%;float:right"><thead><tr><th>一般（記録の多い上位10種）</th><th>記録</th></tr></thead><tbody>${sp.general && sp.general.length ? sp.general.map(x => `<tr><td class="l">${spN(x)}</td><td>${x.n}</td></tr>`).join('') : '<tr><td colspan="2" class="l">GBIF から取得できませんでした</td></tr>'}</tbody></table><div style="clear:both"></div>`;
     }
-    return h + '<small>経路が通る約5kmメッシュの集計で、経路上の位置を示すものではありません。記録数は調査の多さを反映します。区分はGBIFが照合したIUCNの区分で、栽培・外来の記録や名前の対応の違いで、野生の希少種とは限らない種が混じることがあります。希少種の生育・生息地では、踏み荒らしや採取をしないでください。</small>';
+    return h + '<small>経路が通る約5kmメッシュの集計で、経路上の位置を示すものではありません。記録数は調査の多さを反映します。区分はリストの区分（Ⅰ類・Ⅱ類・NT・DD）で、栽培・外来の記録や学名の対応の違いで、野生の希少種とは限らない種が混じることがあります。希少種の生育・生息地では、踏み荒らしや採取をしないでください。</small>';
   }
   // 行程表をテキストの表にする（PowerPoint 用）
   function stepData(r) {

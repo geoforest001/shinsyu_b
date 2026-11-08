@@ -3,18 +3,19 @@
 // PDF・PowerPoint のレポート（絞り込み結果／ルート案内）が使う。
 const MeshInfo = (() => {
   const S = 0.05;
-  let grid = null, rare = {}, byId = new Map();
+  let grid = null, rare = {}, byId = new Map(), label = '環境省・長野県のレッドリスト';
   const set = o => {
     if (o.grid) { grid = o.grid; byId = new Map(grid.features.map(f => [f.properties.id, f])); }
     if (o.rare) rare = o.rare;
+    if (o.label) label = o.label;
   };
   const ready = () => !!grid;
   const idAt = ll => `${Math.floor(ll[1] / S + 1e-9)}_${Math.floor(ll[0] / S + 1e-9)}`;
   const distM = (a, b) => Math.hypot((a[0] - b[0]) * Math.cos((a[1] + b[1]) / 2 * Math.PI / 180), a[1] - b[1]) * 111320;
-  const SEV = { CR: 0, EN: 1, VU: 2 };
+  const SEV = { I: 0, VU: 1, NT: 2, DD: 3 };
 
   // メッシュ1つぶんの情報（危惧種の種名つき）
-  const info = f => { const p = f.properties; return { id: p.id, city: p.city, n: p.n, sp: p.sp, gen: p.gen, slope: p.slope, steep: p.steep, CR: p.CR, EN: p.EN, VU: p.VU,
+  const info = f => { const p = f.properties; return { id: p.id, city: p.city, n: p.n, sp: p.sp, gen: p.gen, slope: p.slope, steep: p.steep, I: p.I, VU: p.VU, NT: p.NT, DD: p.DD,
     animal: p['動物'], plant: p['植物'], fungus: p['菌類'], species: rare[p.id] || [] }; };
   const forId = id => { const f = byId.get(id); return f ? info(f) : null; };
 
@@ -39,10 +40,10 @@ const MeshInfo = (() => {
     }));
     return [...m.values()].sort((a, b) => b.n - a.n);
   }
-  // 区分別（CR/EN/VU）・分類群別（動物/植物/菌類）の記録数の合計
+  // 区分別（Ⅰ類/Ⅱ類/NT/DD）・分類群別（動物/植物/菌類）の記録数の合計
   function breakdown(features) {
-    const b = { CR: 0, EN: 0, VU: 0, animal: 0, plant: 0, fungus: 0, n: 0, gen: 0 };
-    features.forEach(f => { const p = f.properties; b.CR += p.CR; b.EN += p.EN; b.VU += p.VU;
+    const b = { I: 0, VU: 0, NT: 0, DD: 0, animal: 0, plant: 0, fungus: 0, n: 0, gen: 0 };
+    features.forEach(f => { const p = f.properties; b.I += p.I; b.VU += p.VU; b.NT += p.NT; b.DD += p.DD;
       b.animal += p['動物']; b.plant += p['植物']; b.fungus += p['菌類']; b.n += p.n; b.gen += p.gen; });
     return b;
   }
@@ -78,5 +79,6 @@ const MeshInfo = (() => {
       return cs.map((c, i) => ({ sci: nm[i][0], ja: nm[i][1], n: c.count }));
     } catch (e) { return null; }
   }
-  return { set, ready, idAt, forId, forPath, agg, breakdown, generalTop };
+  const catName = c => ({ I: 'Ⅰ類', VU: 'Ⅱ類', NT: 'NT', DD: 'DD' }[c] || c);
+  return { set, catName, label: () => label, ready, idAt, forId, forPath, agg, breakdown, generalTop };
 })();
