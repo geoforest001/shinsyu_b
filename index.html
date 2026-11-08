@@ -170,7 +170,11 @@
   </div>
 </div>
 <div id="res-wrap" class="box" style="display:none;top:10px;right:56px;width:300px">
-    <b>該当メッシュ一覧</b><br>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+    <b>該当メッシュ一覧<span id="res-count" style="font-weight:normal"></span></b>
+    <button id="res-toggle" type="button" aria-expanded="true" style="font-size:12px">折りたたむ ▲</button>
+  </div>
+  <div id="res-body">
       並び順：
       <select id="sort">
         <option value="n">危惧種の記録数</option>
@@ -180,6 +184,7 @@
       </select>
       <div id="results" style="max-height:calc(100vh - 270px);overflow:auto;margin-top:4px;border:1px solid #ccc;border-radius:4px;background:#fff"></div>
       <small>行をクリックすると地図で該当メッシュに移動します。</small>
+  </div>
 </div>
 <dialog id="welcome" style="border:1px solid #888;border-radius:10px;padding:18px 20px;font:14px/1.6 sans-serif;max-width:420px">
   <b style="font-size:17px">長野県 動植物 分布マップ</b><br>
@@ -312,6 +317,15 @@ const map = new maplibregl.Map({
   maxTileCacheZoomLevels: 15
 });
 map.addControl(new maplibregl.NavigationControl());
+// 現在地の表示（右上のボタン。押すと現在地を探して表示し、もう一度押すと追従する）。位置情報の許可が必要で、https か localhost でのみ動く
+map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 15000 }, trackUserLocation: true, showAccuracyCircle: true }), 'top-right');
+// 該当メッシュ一覧の折りたたみ
+$('res-toggle').onclick = () => {
+  const open = $('res-body').style.display === 'none';
+  $('res-body').style.display = open ? '' : 'none';
+  $('res-toggle').textContent = open ? '折りたたむ ▲' : '開く ▼';
+  $('res-toggle').setAttribute('aria-expanded', open);
+};
 
 // 重なり順: 地図 < 一般分布(gen) < 絶滅危惧種(mesh) < 県外マスク(mask)
 const addGen = () => {
@@ -424,6 +438,7 @@ map.on('load', () => {
     if (!on) return;
     const k = $('sort').value;
     const rows = hits().sort((a, b) => b.properties[k] - a.properties[k]);
+    $('res-count').textContent = `（${rows.length}件）`;
     $('results').innerHTML = '<table><tr><th>市町村</th><th>危惧種</th><th>種</th><th>一般</th><th>傾斜</th></tr>' +
       rows.map((f, i) => { const p = f.properties; return `<tr class="row" data-i="${i}"><td>${p.city}</td><td>${p.n}</td><td>${p.sp}</td><td>${p.gen}</td><td>${p.slope}°</td></tr>`; }).join('') + '</table>';
     $('results').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => {
