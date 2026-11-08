@@ -138,14 +138,15 @@
     <small>一般記録には危惧種の記録も含まれます。傾斜は国土地理院DEM10mの集計です。</small>
   </div>
   <div class="sec">
-    <b>調査ルート案内</b>（試作：諏訪湖周辺）<br>
+    <b>調査ルート案内</b>（試作：諏訪湖周辺・上伊那）<br>
     <button id="rt-open">ルート案内を開く</button> <small>出発地と目的地を決めて、車＋徒歩の経路を表示します。</small>
   </div>
 </div>
 <div id="rt-panel" class="box">
   <button id="rt-close" style="float:right;font-size:12px">閉じる</button>
   <h2>調査ルート案内</h2>
-  <small>試作：諏訪湖周辺（青い点線の枠内）。車で行ける所（林道の終点など）まで車で行き、そこから歩く経路を探します。</small>
+  <div style="margin:2px 0">対象範囲：<select id="rt-area"></select></div>
+  <small>試作（青い点線の枠内）。車で行ける所（林道の終点など）まで車で行き、そこから歩く経路を探します。別の範囲の地点を選ぶと、範囲が自動で切り替わります。</small>
   <div class="rt-row"><span class="dot" style="background:#1565c0"></span><input id="rt-in-start" placeholder="出発地（地名・住所、緯度,経度）" autocomplete="off"></div>
   <div class="rt-sub"><button id="rt-locate">現在地</button> <button data-pick="start">地図で選ぶ</button> <small id="rt-note-start"></small></div>
   <div class="rt-hits" id="rt-hits-start" hidden></div>
@@ -192,7 +193,7 @@
   <button class="opt" data-go="general">一般の動植物の分布を見る<small>植物・鳥類・昆虫類などの分類群で切り替え</small></button>
   <button class="opt" data-go="report">レポートを作る<small>条件を選んで、PDFまたはPowerPointで出力</small></button>
   <button class="opt" data-go="white">白地図で抽出結果だけを見る<small>背景なし。危惧種の多い場所（10件以上）を表示</small></button>
-  <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
+  <button class="opt" data-go="route">調査地点までのルートを調べる（試作）<small>諏訪湖周辺・上伊那。出発地と目的地を決めて車＋徒歩の経路を表示</small></button>
   <button class="opt" data-go="feedback">ご要望・お問い合わせ<small>欲しい機能や見たい条件を教えてください</small></button>
   <button class="opt" data-go="free">自由に見る<small>すべてのレイヤと条件を自分で操作</small></button>
 </dialog>
@@ -355,6 +356,11 @@ map.on('load', () => {
       : ok ? `北緯 ${p.ll[1].toFixed(4)}° 東経 ${p.ll[0].toFixed(4)}°` : '<b style="color:#b71c1c">対象範囲の外です</b>';
     $('rt-run').disabled = !(Route.has('start') && Route.has('goal'));
   });
+  // 対象範囲の選択（地点の選択で自動で切り替わったときは、選択欄も合わせる）
+  Object.entries(Route.areas()).forEach(([k, n]) => $('rt-area').add(new Option(n, k)));
+  $('rt-area').value = Route.area;
+  $('rt-area').onchange = e => { Route.setArea(e.target.value); Route.zoomArea(); };
+  document.addEventListener('route-area', e => { $('rt-area').value = e.detail; });
   Route.setVisible(false);
   const setBase = m => {
     const w = m === 'white';

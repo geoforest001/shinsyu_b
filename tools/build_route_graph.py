@@ -4,6 +4,7 @@
 使い方:
     python3 tools/build_route_graph.py                       # 諏訪湖周辺を Overpass API から取得して作成
     python3 tools/build_route_graph.py --area ina            # 伊那IC周辺で作成
+    python3 tools/build_route_graph.py --area kamiina        # 上伊那で作成（範囲が広いので4分割して取得）
     python3 tools/build_route_graph.py --input ways.json     # 取得済みの Overpass JSON から作成
 
 出力: data/route/<area>_graph.json（AREAS を参照）
@@ -30,6 +31,7 @@ import urllib.request
 AREAS = {
     'suwa': ('諏訪湖周辺', (35.93, 137.95, 36.17, 138.27)),
     'ina': ('伊那IC周辺', (35.75, 137.80, 35.95, 138.10)),
+    'kamiina': ('上伊那', (35.60, 137.72, 36.12, 138.28)),
 }
 OUT_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'route')
 SCALE = 1e5
@@ -55,15 +57,35 @@ SKIP_FOOTWAY = {'sidewalk', 'crossing'}
 NO = {'no', 'private'}
 
 
+TILE_DEG = 0.30  # これより広い範囲は、この大きさ以下のタイルに分けて取得する（Overpass の時間制限対策）
+
+
 def fetch(bbox):
     s, w, n, e = bbox
+    if n - s > TILE_DEG or e - w > TILE_DEG:
+        rows = math.ceil((n - s) / TILE_DEG)
+        cols = math.ceil((e - w) / TILE_DEG)
+        merged, seen, stamp = [], set(), ''
+        for r in range(rows):
+            for c in range(cols):
+                tb = (s + (n - s) * r / rows, w + (e - w) * c / cols, s + (n - s) * (r + 1) / rows, w + (e - w) * (c + 1) / cols)
+                print(f'タイル {r * cols + c + 1}/{rows * cols}: {tb}', file=sys.stderr)
+                part = fetch(tb)
+                stamp = stamp or part.get('osm3s', {}).get('timestamp_osm_base', '')
+                for el in part['elements']:  # 境界をまたぐ道は両方のタイルに入るので、IDで重複を除く
+                    k = (el.get('type'), el.get('id'))
+                    if k not in seen:
+                        seen.add(k)
+                        merged.append(el)
+                time.sleep(5)
+        return {'osm3s': {'timestamp_osm_base': stamp}, 'elements': merged}
     hw = '|'.join(HW2CLS)
     q = f'[out:json][timeout:120];way({s},{w},{n},{e})[highway~"^({hw})$"];out geom tags;'
     data = urllib.parse.urlencode({'data': q}).encode()
     wait = 15
     for _ in range(5):
         req = urllib.request.Request('https://overpass-api.de/api/interpreter', data=data,
-                                     headers={'User-Agent': 'shiny_b-route-graph-builder'})
+                                     headers={'User-Agent': 'shinsyu_b-route-graph-builder'})
         try:
             with urllib.request.urlopen(req, timeout=200) as r:
                 return json.load(r)

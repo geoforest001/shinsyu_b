@@ -8,6 +8,7 @@
 - `data/slope_tiles/` : 傾斜区分図の事前計算タイル(z7-13)。縮小表示（ズーム11未満・標準7区分のとき）だけに使う。国土地理院DEM10mの傾斜角を長野県で切り抜き、0-3/3-8/8-15/15-20/20-30/30-40/40°以上に区分
 - `route.js` : 調査ルート案内（試作）。ブラウザ内で経路探索（車→駐車→徒歩→道なし区間）
 - `data/route/suwa_graph.json` : 諏訪湖周辺（北緯35.93–36.17°・東経137.95–138.27°）の道路グラフ。`tools/build_route_graph.py` で OpenStreetMap から作成
+- `data/route/kamiina_graph.json` : 上伊那（北緯35.60–36.12°・東経137.72–138.28°、伊那市・駒ヶ根市・辰野町・箕輪町・南箕輪村・飯島町・中川村・宮田村を含む）の道路グラフ（4.05MB）。ルート案内の「対象範囲」で選ぶか、範囲内の地点を選ぶと自動で切り替わる（切り替えると出発地・目的地・経路は消える）
 - `mesh_info.js` : メッシュの情報（危惧種の種名、ルートが通るメッシュ、危惧種の内訳、一般種のGBIF取得）。レポートが使う
 - `pptx_report.js` : PowerPoint（.pptx）出力。PptxGenJS（unpkg から読み込み）で絞り込み結果とルート案内のスライドを作る
 - `data/rare_species.json` : メッシュごとの危惧種の種名（和名・学名・区分・記録数。GBIFから集計）
@@ -37,7 +38,10 @@
 ```
 python3 tools/build_route_graph.py              # Overpass API から取得して data/route/suwa_graph.json を作成
 python3 tools/build_route_graph.py --area ina   # 伊那IC周辺（data/route/ina_graph.json）
+python3 tools/build_route_graph.py --area kamiina   # 上伊那（広いので4分割して取得。Overpass が混むと時間がかかる）
 python3 tools/add_route_elevation.py            # 作り直したグラフに登り下りの係数を書き足す（標高タイルは tools/.dem_cache/ に保存）
 ```
 `add_route_elevation.py` は HTTPS で標高タイルを取得するため、SSL 付きの Python で実行してください（macOS なら `/usr/bin/python3` で動作確認済み）。
+`build_route_graph.py` の Overpass への接続は、`/usr/bin/python3`（LibreSSL）では TLS ハンドシェイクに失敗することがあります。OpenSSL 3 の Python（例：Homebrew の `/opt/homebrew/bin/python3`）で実行してください。上伊那のグラフはこの Python で作成しました。
+エリアを増やすときは、`tools/build_route_graph.py` の `AREAS` と `route.js` の `AREAS` の両方に追加します。
 GeoJSON ではなく、座標を約1m単位の整数にして差分で並べた独自 JSON にしています。諏訪湖周辺では、同じ内容の GeoJSON 8.65MB（gzip 1.23MB）に対して 1.60MB（gzip 0.60MB）です。

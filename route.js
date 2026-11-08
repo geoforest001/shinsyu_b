@@ -5,9 +5,13 @@
 // 徒歩の時間は登り下りを考慮する（Tobler の歩行関数）。道ごとの係数は tools/add_route_elevation.py がグラフに書き足す。
 // 道のない区間は slope.js で標高・傾斜を読み、急斜面を避けるアプローチ点を選ぶ。
 const Route = (() => {
-  const URL_GRAPH = 'data/route/suwa_graph.json';
-  const AREA = [137.95, 35.93, 138.27, 36.17];  // 西, 南, 東, 北（グラフの bbox と同じ）
-  const AREA_NAME = '諏訪湖周辺';
+  // 対象範囲（エリア）。bbox は 西, 南, 東, 北（グラフの bbox と同じ）。道路グラフは tools/build_route_graph.py が作る
+  const AREAS = {
+    suwa: { name: '諏訪湖周辺', bbox: [137.95, 35.93, 138.27, 36.17], url: 'data/route/suwa_graph.json' },
+    kamiina: { name: '上伊那', bbox: [137.72, 35.60, 138.28, 36.12], url: 'data/route/kamiina_graph.json' },
+  };
+  let areaKey = 'suwa', AREA = AREAS.suwa.bbox, AREA_NAME = AREAS.suwa.name, URL_GRAPH = AREAS.suwa.url;
+  const graphs = {};  // 読み込み済みのグラフ（エリアごと）
   const PARK_SEC = 120;          // 駐車・身支度の時間（車→徒歩の乗り換えコスト）
   const OFFROAD_KMH = 1.0;       // 道のない区間（藪こぎ・沢沿い）の歩行速度の目安
   const SNAP_MAX_M = 3000;       // 出発地を道路に吸着させる最大距離
@@ -75,18 +79,19 @@ const Route = (() => {
     arcs.forEach(([n, m, t, c, s]) => { const i = fill[n * 2 + m]++; to[i] = t * 2 + m; edge[i] = c; cost[i] = s; });
     return { d, nN, lon, lat, E, gx, gy, off, to, edge, cost, carNode, footSec, hasTob: !!d.tob };
   }
-  const load = () => loading || (loading = fetch(URL_GRAPH).then(r => {
+  const load = () => loading || (loading = (k => fetch(URL_GRAPH).then(r => {
     if (!r.ok) throw new Error('道路データを読み込めませんでした');
     return r.json();
-  }).then(d => (G = decode(d))));
+  }).then(d => { const g = graphs[k] = decode(d); if (k === areaKey) G = g; return g; }))(areaKey));
 
   // ---- 幾何 ----
   const distM = (a, b) => {
     const k = Math.cos((a[1] + b[1]) / 2 * Math.PI / 180);
     return Math.hypot((a[0] - b[0]) * k, a[1] - b[1]) * 111320;
   };
-  const inArea = ll => { const b = AREA;
-    return ll[0] >= b[0] && ll[0] <= b[2] && ll[1] >= b[1] && ll[1] <= b[3]; };
+  const inBox = (b, ll, m = 0) => ll[0] >= b[0] - m && ll[0] <= b[2] + m && ll[1] >= b[1] - m && ll[1] <= b[3] + m;
+  const inArea = ll => inBox(AREA, ll);
+  const areaOf = ll => inArea(ll) ? areaKey : Object.keys(AREAS).find(k => inBox(AREAS[k].bbox, ll)) || null;
   function nearestCarNode(ll) {
     let best = -1, bd = Infinity;
     for (let i = 0; i < G.nN; i++) {
@@ -462,6 +467,8 @@ const Route = (() => {
     map.getSource('rt-path').setData(empty()); map.getSource('rt-pt').setData(empty());
   }
   function setPoint(which, ll, label) {
+    const k = areaOf(ll);
+    if (k && k !== areaKey) { setArea(k); switchedTo = AREAS[k].name; }  // 別のエリアの地点なら、エリアを切り替える（今の出発地・目的地は消える）
     pts[which] = { ll, label };
     if (!markers[which]) {
       const m = new maplibregl.Marker({ color: COLOR[which], draggable: true }).setLngLat(ll).addTo(map);
@@ -470,7 +477,26 @@ const Route = (() => {
     } else markers[which].setLngLat(ll).addTo(map);
     onChange(which, pts[which], inArea(ll));
     if (routed) run();             // 案内中にピンを動かしたら引き直す
-    else clearRoute(), onMsg(pts.start && pts.goal ? '「案内」を押すと経路を表示します。' : pts.start ? '目的地を決めてください。' : '出発地を決めてください。');
+    else {
+      clearRoute();
+      const sw = switchedTo ? `対象範囲を「${switchedTo}」に切り替えました。<br>` : ''; switchedTo = null;
+      onMsg(sw + (pts.start && pts.goal ? '「案内」を押すと経路を表示します。' : pts.start ? '目的地を決めてください。' : '出発地を決めてください。'));
+    }
+  }
+  let switchedTo = null;
+  // 対象範囲（エリア）を切り替える。出発地・目的地・経路は消す（別の範囲の点は使えないため）
+  function setArea(key) {
+    if (key === areaKey || !AREAS[key]) return;
+    const netOn = map && map.getLayer('rt-net') && map.getLayoutProperty('rt-net', 'visibility') !== 'none';
+    areaKey = key; const a = AREAS[key]; AREA = a.bbox; AREA_NAME = a.name; URL_GRAPH = a.url;
+    G = graphs[key] || null; loading = graphs[key] ? Promise.resolve(graphs[key]) : null;
+    ['start', 'goal'].forEach(w => { pts[w] = null; if (markers[w]) markers[w].remove(); onChange(w, null, true); });
+    if (map) {
+      clearRoute();
+      map.getSource('rt-area').setData(areaFeature());
+      if (map.getSource('rt-net')) { ['rt-net-foot', 'rt-net'].forEach(l => map.removeLayer(l)); map.removeSource('rt-net'); if (netOn) showNetwork(true); }
+    }
+    document.dispatchEvent(new CustomEvent('route-area', { detail: key }));
   }
   function clear() {
     ['start', 'goal'].forEach(w => { pts[w] = null; if (markers[w]) markers[w].remove(); onChange(w, null, true); });
@@ -499,7 +525,7 @@ const Route = (() => {
     if (m) { let a = +m[1], b = +m[2]; if (a > 90) [a, b] = [b, a]; return [{ ll: [b, a], label: `北緯 ${a}° 東経 ${b}°` }]; }
     const r = await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(text.trim()));
     if (!r.ok) throw new Error('地名を検索できませんでした');
-    const near = ll => ll[0] > AREA[0] - 0.1 && ll[0] < AREA[2] + 0.1 && ll[1] > AREA[1] - 0.1 && ll[1] < AREA[3] + 0.1;
+    const near = ll => Object.values(AREAS).some(a => inBox(a.bbox, ll, 0.1));
     return (await r.json()).map(f => ({ ll: f.geometry.coordinates, label: f.properties.title })).filter(f => near(f.ll)).slice(0, 8);
   }
 
@@ -519,10 +545,10 @@ const Route = (() => {
     }
     ['rt-net', 'rt-net-foot'].forEach(l => map.setLayoutProperty(l, 'visibility', 'visible'));
   }
+  const areaFeature = () => { const b = AREA; return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } }; };
   function init(m, msg, change) {
     map = m; onMsg = msg; onChange = change;
-    const b = AREA;
-    map.addSource('rt-area', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } } });
+    map.addSource('rt-area', { type: 'geojson', data: areaFeature() });
     map.addLayer({ id: 'rt-area', type: 'line', source: 'rt-area', paint: { 'line-color': '#1565c0', 'line-width': 1.5, 'line-dasharray': [4, 2] }, layout: { visibility: 'none' } });
     map.addSource('rt-path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'rt-path-off', type: 'line', source: 'rt-path', filter: ['==', ['get', 'kind'], 'off'], paint: { 'line-color': '#616161', 'line-width': 2.5, 'line-dasharray': [1, 1.5] } });
@@ -557,5 +583,6 @@ const Route = (() => {
   const pick = which => { pickFor = which; map.getCanvas().style.cursor = 'crosshair'; onMsg(`地図をクリックして${which === 'start' ? '出発地' : '目的地'}を選んでください。`); };
   const zoomArea = () => map.fitBounds([[AREA[0], AREA[1]], [AREA[2], AREA[3]]], { padding: pad(40), duration: 700 });
   return { init, setVisible, gpx, hasRoute: () => !!lastRoute, showNetwork, run, clear, swap, locate, search, setPoint, pick, handleClick, zoomArea, inArea,
-    animate, pauseAnim, has: w => !!pts[w], result: () => last, AREA_NAME };
+    animate, pauseAnim, has: w => !!pts[w], result: () => last,
+    setArea, areas: () => Object.fromEntries(Object.entries(AREAS).map(([k, a]) => [k, a.name])), get area() { return areaKey; }, get AREA_NAME() { return AREA_NAME; } };
 })();
