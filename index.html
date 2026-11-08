@@ -33,7 +33,7 @@
   .ra-label { font: bold 17px/1.15 sans-serif; color: #fff; white-space: nowrap; pointer-events: none; letter-spacing: .04em;
     text-shadow: -2px -2px 0 #0d2a6b, 2px -2px 0 #0d2a6b, -2px 2px 0 #0d2a6b, 2px 2px 0 #0d2a6b, 0 -2px 0 #0d2a6b, 0 2px 0 #0d2a6b, -2px 0 0 #0d2a6b, 2px 0 0 #0d2a6b, 0 4px 6px #000a; }
   .ra-label.goal { text-shadow: -2px -2px 0 #8e0000, 2px -2px 0 #8e0000, -2px 2px 0 #8e0000, 2px 2px 0 #8e0000, 0 -2px 0 #8e0000, 0 2px 0 #8e0000, -2px 0 0 #8e0000, 2px 0 0 #8e0000, 0 4px 6px #000a; }
-  .ra-label.park { font-size: 14px; } .ra-label small { display: block; font-size: 13px; }
+  .ra-label.park { font-size: 14px; } .ra-label small { display: block; font-size: 13px; color: #fff; }
   .ra-arrow { pointer-events: none; filter: drop-shadow(0 1px 2px #0008); }
   .ra-hud { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%); z-index: 2; min-width: 230px; padding: 6px 12px 8px; pointer-events: none;
     background: linear-gradient(#fffffff0, #eeeeeef0); border-radius: 6px; box-shadow: 0 2px 8px #0005; font-family: sans-serif; }
@@ -305,7 +305,10 @@ const map = new maplibregl.Map({
     layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#ffffff' } }, { id: 'gsi', type: 'raster', source: 'gsi' }]
   },
   center: [138.0, 36.15], zoom: 7.3,
-  preserveDrawingBuffer: true
+  preserveDrawingBuffer: true,
+  // 読み込んだタイルを多めに覚えておく（既定は 5。画面の広さ×この値が上限）。
+  // 経路アニメーションの 2 周目以降、タイルを読み直さずに表示するため
+  maxTileCacheZoomLevels: 15
 });
 map.addControl(new maplibregl.NavigationControl());
 
