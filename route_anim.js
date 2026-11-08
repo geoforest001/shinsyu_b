@@ -10,7 +10,7 @@ const RouteAnim = (() => {
   const SPEED_MPS = 450, PARK_PAUSE_MS = 1200, RUN_MAX_MS = 60000;
   const DIM = 0.25;              // アニメーション中、経路全体（静止表示）を薄くする不透明度
   const PITCH = 60, HOLD_PITCH = 45;
-  const ZOOM = 13.5;     // たどる間のカメラのズーム（一定にして、画面上の速さもそろえる）
+  const ZOOM = 14;     // たどる間のカメラのズーム（一定にして、画面上の速さもそろえる）
   const LOOK_M = 800;    // 進行方向を決めるときに先を見る距離
   const COLOR = { off: '#424242', car: '#1565c0', park: '#ff6f00', foot: '#2e7d32', steep: '#d32f2f' };
   const NAME = { off: '道なし', car: '車', park: '駐車', foot: '徒歩', steep: '急斜面' };
@@ -18,6 +18,7 @@ const RouteAnim = (() => {
   const LAYERS = ['rt-anim-off', 'rt-anim-steep', 'rt-anim-casing', 'rt-anim-car', 'rt-anim-foot'];
   let map = null, path = null, on = false, paused = false, running = false;
   let frame = 0, t0 = 0, phase = '', lastNow = 0, follow = true, camB = 0, camZ = 13, curKind = '';
+  let capped = [];  // アニメーション中に最大ズームを下げたラスタソース [ソース, 元の maxzoom]
   let getPad = () => 60, arrow = null, arrowOn = false, hud = null, marks = [];
 
   const distM = (a, b) => {
@@ -153,9 +154,9 @@ const RouteAnim = (() => {
     if (!map || !map.getSource('rt-anim')) return;
     const run = on && !paused && !!path;
     STATIC.forEach(l => map.setPaintProperty(l, 'line-opacity', run ? DIM : 1));
-    if (run && !running) { running = true; t0 = performance.now(); phase = ''; lastNow = 0; frame = requestAnimationFrame(tick); }
+    if (run && !running) { running = true; capTiles(true); t0 = performance.now(); phase = ''; lastNow = 0; frame = requestAnimationFrame(tick); }
     if (!run && running) {
-      running = false;
+      running = false; capTiles(false);
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
       map.getSource('rt-anim').setData({ type: 'FeatureCollection', features: [] });
@@ -167,6 +168,22 @@ const RouteAnim = (() => {
       if (path) map.fitBounds(path.bounds, { padding: getPad(), ...view, duration: instant ? 0 : 700 });
       else map.easeTo({ ...view, duration: instant ? 0 : 700 });
     }
+  }
+  // アニメーション中は、ラスタタイル（背景地図・一般記録・傾斜図）を 1 段粗いズームのものを拡大して使う。
+  // たどる間のズーム（ZOOM）で本来使うタイルの 1/4 の枚数で済み、読み込み中のぼやけが減る。
+  // 1 周目に読んだタイルは地図が覚えておくので（index.html の maxTileCacheZoomLevels）、2 周目以降は読み直さない。
+  // source.maxzoom は MapLibre がタイルを選ぶたびに読む値（4.7.1 で確認）。止めたら元に戻す
+  function capTiles(v) {
+    if (v) {
+      const st = map.getStyle().sources;
+      capped = Object.keys(st).filter(id => st[id].type === 'raster').map(id => {
+        const s = map.getSource(id), cap = Math.round(ZOOM + Math.log2(512 / (s.tileSize || 512))) - 1;  // 本来使うズームの 1 段下
+        if (!(s.maxzoom > cap)) return null;
+        const orig = s.maxzoom; s.maxzoom = cap;
+        return [s, orig];
+      }).filter(Boolean);
+    } else { capped.forEach(([s, z]) => s.maxzoom = z); capped = []; }
+    map.triggerRepaint();
   }
   const enable = v => { on = v; update(); };
   // PDF の地図画像を撮る間などに一時停止する（すぐに静止表示に戻す）
